@@ -1,0 +1,33 @@
+{
+  "image": "qa\\geo-p0.40.png",
+  "p": 0.4,
+  "excludeTop": 0,
+  "canvas": [
+    1600,
+    900
+  ],
+  "camera": {
+    "tx": -337.60946153905934,
+    "ty": -426.90729326969165,
+    "scale": 0.9480078846158828
+  },
+  "actualInkPixels": 13580,
+  "expectedInkPixels": 11137,
+  "areaRatio": 1.2193588937774984,
+  "iou": 0.8182286302780638,
+  "centroidActual": [
+    685.3934462444772,
+    712.4425625920471
+  ],
+  "centroidExpected": [
+    680.5194397054862,
+    717.258058723175
+  ],
+  "centroidDistancePx": 6.851637959717019,
+  "centroidDistanceFrac": 0.0049794064615165095,
+  "expectedDiagonalPx": 1375.9949127812936,
+  "degenerate": false,
+  "compareInkRatio": 1.5029455081001473,
+  "passed": true,
+  "problems": []
+}

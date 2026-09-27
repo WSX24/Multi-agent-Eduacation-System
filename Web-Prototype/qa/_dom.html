@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-film="media"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智塾 · AI Teaching Platform — 多智能体教学系统</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/landing.css">
+</head>
+<body class="landing">
+
+<header class="land-top">
+  <a class="mark" href="index.html">
+    <span aria-hidden="true">智塾</span>
+    <small>AI TEACHING PLATFORM</small>
+  </a>
+  <nav>
+    <a href="#agents" data-scroll-to="agents">四个 Agent</a>
+    <a href="#loop" data-scroll-to="loop">学习闭环</a>
+  </nav>
+  <a class="btn btn-sm" href="auth.html">进入系统</a>
+</header>
+
+<!-- ══ 欢迎页：一条自己生长的墨线 ═════════════════════════════════════
+     全部画面由唯一变量 p（0→1）与 js/line-runtime.js 连续重算：
+       一张近白略暖的素色台面上摊着一本米色的书，右后方悬浮着一颗深蓝灰的
+       多面体；知识从书里化作一团柔和的光，飘过去把它点亮。
+     滚轮位置就是成片时间轴的位置，不是「滚一下按播放键」：输入停止画面就停住，
+     往回滚就是往回放。影片是全关键帧，所以任意位置都能即时定位。
+     镜头、光、时间轴都烘在成片里；参数与时间只在构建产物里：
+     build/timeline.json（帧率/帧数/段落）与 build/motion-budget.json（交付格式）。 -->
+<section class="film" id="film" data-od-id="hero" style="--film-h: 320vh; --say: 0.259; --cue: 0.000; --cta: 0.000;">
+  <div class="film-pin" id="filmPin">
+    <!-- 影片是居中一个框，不是满幅铺底。理由写在 source/concept-contract.yaml 的
+         destination：母版只有 844 px 宽，抻满全屏就是反向放大。
+         而它的背景是近白、页面也是白，所以用一层径向遮罩把四边淡出去，
+         边界几乎看不见，观感仍接近满屏。 -->
+    <div class="film-frame is-media" id="filmFrame">
+      <img class="film-poster" src="build/media/final/poster.png" alt="" decoding="async">
+    <video class="film-video" playsinline="" preload="auto" poster="build/media/final/poster.png" aria-hidden="true" disablepictureinpicture="" src="build/media/final/motion-baked-desktop.mp4"></video></div>
+
+    <div class="film-say">
+      <div class="lock-wrap">
+        <p class="lockup-kicker">多智能体教学系统</p>
+        <h1 class="lockup">
+          <span class="l1">AI</span>
+          <span class="l2">Teaching <em>Platform</em></span>
+        </h1>
+        <p class="in-sub">教师拆大纲 · 助教批改 · 答疑守错题 · 督学排复习</p>
+      </div>
+
+      <div class="film-cta" id="filmCta">
+        <a class="btn btn-primary btn-lg" href="auth.html">开始学习</a>
+      </div>
+    </div>
+
+    <div class="film-cue" id="filmCue" aria-hidden="true"><i></i></div>
+  </div>
+  <div class="film-track" aria-hidden="true"><span id="filmBar" style="transform: scaleX(0.5);"></span></div>
+</section>
+
+<!-- ══ 四个 Agent ═════════════════════════════════════════════════ -->
+<section class="land-section" id="agents" data-od-id="agents">
+  <div class="wrap">
+    <span class="kicker">四个 AGENT · 一条流水线</span>
+    <h2>一间教室里，四个角色各管一段。</h2>
+    <p class="sub">它们不是四个聊天框，而是四条流水线：每一段产出都会流向下一个 Agent，也会回流给上一个。</p>
+
+    <div class="agents-row">
+      <article class="agent-tile">
+        <span class="sigil">T / TEACHER</span>
+        <h3>教师 Agent</h3>
+        <p>生成学习计划与教学任务。从大纲开始，把内容串成单元与章节；不一次性铺满全部讲解与视频，因为你随时可能调难度。</p>
+        <ul>
+          <li>· 大纲 → 单元 → 章节</li>
+          <li>· 每单元小练习</li>
+          <li>· 每章节一次测验</li>
+        </ul>
+      </article>
+      <article class="agent-tile">
+        <span class="sigil">A / ASSISTANT</span>
+        <h3>助教 Agent</h3>
+        <p>批改提交的答案，产出学情报告与薄弱点分析，共享给教师 Agent 调整后续任务；同时把错题归纳好，交给答疑 Agent。</p>
+        <ul>
+          <li>· 自动批改</li>
+          <li>· 薄弱点分析 → 教师</li>
+          <li>· 错题归纳 → 答疑</li>
+        </ul>
+      </article>
+      <article class="agent-tile">
+        <span class="sigil">Q / Q&amp;A</span>
+        <h3>答疑 Agent</h3>
+        <p>收纳整本错题库。错题一键解答，也可以单独对话；拿到错题后还能检索或生成同类型题目，让你在同一条沟里摔第二次的机会变小。</p>
+        <ul>
+          <li>· 错题一键解答</li>
+          <li>· 单独对话</li>
+          <li>· 生成同类型题</li>
+        </ul>
+      </article>
+      <article class="agent-tile">
+        <span class="sigil">C / COACH</span>
+        <h3>督学 Agent</h3>
+        <p>采集学习时长、做题量、正确率与提问情况，判断拖延倾向；按艾宾浩斯遗忘曲线排复习计划，每天在首页留一句正能量，定期出学习状态简报。</p>
+        <ul>
+          <li>· 行为数据采集</li>
+          <li>· 遗忘曲线复习</li>
+          <li>· 每日一句 / 简报</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 学习闭环 ═══════════════════════════════════════════════════ -->
+<section class="land-section" id="loop" data-od-id="loop">
+  <div class="wrap">
+    <span class="kicker">学习闭环 · 从大纲到复习</span>
+    <h2>一条从大纲走到复习的闭环。</h2>
+    <div class="loop-row">
+      <div class="loop-cell">
+        <span class="idx">01</span>
+        <h4>生成课堂</h4>
+        <p>选教师形象、LLM 模型与教学周期，先出一份大纲。</p>
+      </div>
+      <div class="loop-cell">
+        <span class="idx">02</span>
+        <h4>按需生成</h4>
+        <p>讲解与视频随进度生成，难度随时微调。</p>
+      </div>
+      <div class="loop-cell">
+        <span class="idx">03</span>
+        <h4>练习与测验</h4>
+        <p>每单元小练习，每章节一次测验，答完即交。</p>
+      </div>
+      <div class="loop-cell">
+        <span class="idx">04</span>
+        <h4>批改与学情</h4>
+        <p>助教给分、定位薄弱点，把错题送进错题库。</p>
+      </div>
+      <div class="loop-cell">
+        <span class="idx">05</span>
+        <h4>答疑与复习</h4>
+        <p>一键解答错题，按遗忘曲线排回复习计划。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 结尾 ═══════════════════════════════════════════════════════ -->
+<section class="land-cta" id="cta" data-od-id="cta">
+  <div class="wrap">
+    <h2>今天读的第一页，会被它记到复习计划里。</h2>
+    <div class="row row--wrap">
+      <a class="btn btn-primary btn-lg" href="auth.html">开始学习</a>
+      <a class="btn btn-lg" href="index.html">查看全部页面</a>
+    </div>
+  </div>
+</section>
+
+<footer class="land-foot">
+  <div class="wrap row row--between row--wrap" style="width:100%">
+    <span>智塾 · AI TEACHING PLATFORM</span>
+    <span>教师 / 助教 / 答疑 / 督学</span>
+  </div>
+</footer>
+
+<!-- 页面只读构建产物：build/timeline.json（时间轴）与 build/media/final/（成片）。
+     没有 source/ 依赖，也没有第二份时间常量。 -->
+<script type="module" src="js/film-runtime.js"></script>
+<script src="js/landing.js" defer=""></script>
+
+
+</body></html>

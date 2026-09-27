@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "fps": 24.0,
+  "frameDuration": 0.041666666666666664,
+  "frameCount": 97,
+  "initialState": "K0",
+  "states": [
+    {
+      "id": "K0",
+      "frame": 0,
+      "hold": 0.0
+    },
+    {
+      "id": "K1",
+      "frame": 96,
+      "hold": 4.0
+    }
+  ],
+  "segments": [
+    {
+      "id": "K0->K1",
+      "from": "K0",
+      "to": "K1",
+      "sourceFrames": {
+        "start": 0,
+        "hold": 96,
+        "endExclusive": 97
+      },
+      "frames": {
+        "start": 0,
+        "hold": 96,
+        "endExclusive": 97
+      },
+      "start": 0.0,
+      "hold": 4.0,
+      "endExclusive": 4.041666666666667,
+      "curve": {
+        "type": "edge-mid-edge",
+        "edgeRate": 1.2,
+        "midRate": 0.85
+      }
+    }
+  ]
+}

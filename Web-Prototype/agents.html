@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent 运行态看板 · 智塾</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body data-page="agents" data-crumb="Agent 运行态看板">
+
+<div class="app" id="app" data-nav="closed">
+  <aside class="sidebar"></aside>
+  <div class="main">
+    <header class="topbar"></header>
+
+    <main class="page">
+      <div class="page-head">
+        <div>
+          <span class="eyebrow">AGENT RUNTIME / 四个 Agent</span>
+          <h1 class="page-title" style="margin-top:8px">运行态看板</h1>
+          <p class="lead">教师、助教、答疑、督学四条流水线的实时状态。每一段产出都会流向下一个 Agent，也会回流给上一个。</p>
+        </div>
+        <div class="row">
+          <button class="btn" type="button" id="stepOnce">推进一轮</button>
+          <button class="btn btn-primary" type="button" id="toggleRun">暂停全部 Agent</button>
+        </div>
+      </div>
+
+      <dl class="stat-strip">
+        <div class="stat"><dt>RUNTIME / 运行状态</dt><dd style="font-size:var(--text-xl)"><span class="badge badge--success" id="runState">运行中</span></dd><span class="delta" id="runDelta">自动推进 · 每 3 秒一轮</span></div>
+        <div class="stat"><dt>TASKS / 今日任务</dt><dd><span data-count-to="128">128</span><small>次</small></dd><span class="delta">四次交接 34 次</span></div>
+        <div class="stat"><dt>DONE / 已完成</dt><dd><span id="statDone">121</span><small>次</small></dd><span class="delta" id="statDoneDelta">成功率 98.4%</span></div>
+        <div class="stat"><dt>QUEUE / 排队中</dt><dd><span id="statQueued">5</span><small>项</small></dd><span class="delta">按需生成策略生效</span></div>
+      </dl>
+
+      <!-- 交接链路 -->
+      <section style="margin-top:40px" data-od-id="handoff">
+        <div class="section-head">
+          <div>
+            <h2>交接链路</h2>
+            <p>箭头上的字是真正在流转的数据，不是装饰。</p>
+          </div>
+          <span class="badge">4 Agent · 3 条回路</span>
+        </div>
+
+        <div class="flow">
+          <div class="flow-node">
+            <b>教师 Agent</b>
+            <span>T / TEACHER</span>
+            <p class="body-sm body-muted" style="margin-top:12px">产出：大纲、单元、章节、任务</p>
+            <p class="caption" style="margin-top:8px">→ 交给助教：待答题目与评分标准</p>
+          </div>
+          <div class="flow-node">
+            <b>助教 Agent</b>
+            <span>A / ASSISTANT</span>
+            <p class="body-sm body-muted" style="margin-top:12px">产出：批改结果、学情报告、薄弱点</p>
+            <p class="caption" style="margin-top:8px">→ 回流教师：难度调整依据</p>
+          </div>
+          <div class="flow-node">
+            <b>答疑 Agent</b>
+            <span>Q / Q&amp;A</span>
+            <p class="body-sm body-muted" style="margin-top:12px">产出：错题解答、同类型题</p>
+            <p class="caption" style="margin-top:8px">← 来自助教：错题库</p>
+          </div>
+          <div class="flow-node">
+            <b>督学 Agent</b>
+            <span>C / COACH</span>
+            <p class="body-sm body-muted" style="margin-top:12px">产出：复习计划、简报、每日一句</p>
+            <p class="caption" style="margin-top:8px">→ 回流教师：学习节奏与时长</p>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px">
+          <div class="panel-head"><span class="panel-title">最近 4 次交接</span><span class="caption">可在日志里追溯</span></div>
+          <ul>
+            <li class="list-row"><span class="badge">A → T</span><span style="flex:1">第 3 单元正确率 82% → 68%，建议把「循环队列判满」补一节课</span><span class="caption">09:24</span></li>
+            <li class="list-row"><span class="badge">A → Q</span><span style="flex:1">收纳 3 道错题：循环队列判满 2 题、链表反转 1 题</span><span class="caption">09:24</span></li>
+            <li class="list-row"><span class="badge">C → T</span><span style="flex:1">本周周末学时只有工作日 38%，建议把复习量前置到周三</span><span class="caption">07:30</span></li>
+            <li class="list-row"><span class="badge">Q → A</span><span style="flex:1">生成 5 道同类型题，交助教批改后计入正确率</span><span class="caption">昨天 22:02</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 四个 Agent -->
+      <section style="margin-top:40px" data-od-id="agent-queues">
+        <div class="section-head">
+          <div>
+            <h2>任务队列</h2>
+            <p>点「推进一轮」看它们怎么交接；暂停后队列会停在原地。</p>
+          </div>
+        </div>
+
+        <div class="agent-grid">
+
+          <!-- 教师 -->
+          <article class="agent-board" data-agent="teacher" data-state="busy">
+            <div class="agent-head">
+              <span class="agent-sigil" aria-hidden="true">T</span>
+              <span style="flex:1;min-width:0">
+                <span class="agent-name">教师 Agent</span>
+                <span class="agent-role">生成学习计划与教学任务</span>
+              </span>
+              <span class="badge" data-board-status>生成中</span>
+            </div>
+            <ul class="task-list">
+              <li class="task" data-state="running">
+                <span class="dot dot--live dot--pulse" data-task-dot></span>
+                <span class="task-body">
+                  <span class="task-title">U1 · 数组与动态扩容 · 讲解稿</span>
+                  <span class="task-meta">按需生成 · 预计 12 分钟课时</span>
+                </span>
+                <span class="badge" data-task-badge>进行中</span>
+              </li>
+              <li class="task" data-state="queued">
+                <span class="dot dot--idle" data-task-dot></span>
+                <span class="task-body">
+                  <span class="task-title">U1 · 视频（等你今晚 20:00 前后在线再生成）</span>
+                  <span class="task-meta">避免白做 · 依播放习惯排期</span>
+                </span>
+                <span class="badge" data-task-badge>排队</span>
+              </li>
+              <li class="task" data-state="queued">
+                <span class="dot dot--idle" data-task-dot></span>
+                <span class="task-body">
+                  <span class="task-title">U4 · 动态规划 · 骨架（只有大纲，不做实）</span>
+                  <span class="task-meta">长期班策略：难度未定，先不展开</span>
+                </span>
+                <span class="badge" data-task-badge>排队</span>
+              </li>
+            </ul>
+            <div class="card-foot row row--between">
+              <span class="caption" data-board-count>今日 42 项 · 排队 2</span>
+              <span class="badge badge--accent">按需生成</span>
+            </div>
+          </article>
+
+          <!-- 助教 -->
+          <article class="agent-board" data-agent="assistant" data-state="busy">
+            <div class="agent-head">
+              <span class="agent-sigil" aria-hidden="true">A</span>
+              <span style="flex:1;min-width:0">
+                <span class="agent-name">助教 Agent</span>
+                <span class="agent-role">批改答案 · 学情报告 · 薄弱点分析</span>
+              </span>
+              <span class="badge" data-board-status>批改中</span>
+            </div>
+            <ul class="task-list">
+              <li class="task" data-state="running">
+                <span class="dot dot--live dot--pulse" data-task-dot></span>
+                <span class="task-body">
+                  <span class="task-title">1.3 栈与队列 · 章节测验 · 12 题</span>
+                  <span class="task-meta">已批 9 / 12 · 逐题写批注</span>
+                </span>
+                <span class="badge" data-task-badge>进行中</span>
+              </li>
+              <li class="task" data-state="queued">
+                <span class="dot dot--idle" data-task-dot></span>
+                <span class="task-body">
+                  <span class="task-title">生成第 3 单元学情报告（共享给教师 Agent）</span>
+                  <span class="task-meta">含薄弱点排序与难度建议</span>
+                </span>
+                <span class="badge" data-task-badge>排队</span>
+              </li>
+            </ul>
+            <div class="panel-body" style="border-top:1px solid var(--border-soft)">
+              <span class="caption">薄弱点 TOP 3 · 用于回流教师 Agent</span>
+              <div class="bar-row" data-level="weak" style="margin-top:8px"><span>循环队列判满</span><span class="bar-track"><span style="width:46%"></span></span><span class="pct">46%</span></div>
+              <div class="bar-row" data-level="mid"><span>特征值与特征向量</span><span class="bar-track"><span style="width:62%"></span></span><span class="pct">62%</span></div>
+              <div class="bar-row" data-level="good"><span>二叉树遍历</span><span class="bar-track"><span style="width:88%"></span></span><span class="pct">88%</span></div>
+            </div>
+            <div class="card-foot row row--between">
+              <span class="caption" data-board-count>今日 34 题 · 排队 1</span>
+              <span class="badge badge--success">已共享</span>
+            </div>
+          </article>
+
+          <!-- 答疑 -->
+          <article class="agent-board" data-agent="qa" data-state="busy">
+            <div class="agent-head">
+              <span class="agent-sigil" aria-hidden="true">Q</span>
+              <span style="flex:1;min-width:0">
+                <span class="agent-name">答疑 Agent</span>
+                <span class="agent-role">错题库 · 一键解答 · 同类型题</span>
+              </span>
+              <span class="badge" data-board-status>解答中</span>
+            </div>
+            <ul class="task-list">
+              <li class="task" data-state="running">
+                <span class="dot dot--live dot--pulse" data-task-dot></span>
+                <span class="task-body">
+                  <span class="task-title">一键解答 · 循环队列判满（错 2 次）</span>
+                  <span class="task-meta">先给错因，再给正解与同类题</span>
+                </span>
+                <span class="badge" data-task-badge>进行中</span>
+              </li>
+              <li class="task" data-state="queued">
+                <span class="dot dot--idle" data-task-dot></span>
+                <span class="task-body">
+                  <span class="task-title">生成 5 道同类型题 · 循环队列</span>
+                  <span class="task-meta">做得对才从错题库移出</span>
+                </span>
+                <span class="badge" data-task-badge>排队</span>
+              </li>
+            </ul>
+            <div class="panel-body" style="border-top:1px solid var(--border-soft)">
+              <span class="caption">错题库收纳</span>
+              <div class="review-item" style="margin-top:8px"><time>数据结构</time><span style="flex:1">循环队列判满 · 错 2 次</span><span class="badge badge--danger">未掌握</span></div>
+              <div class="review-item"><time>线性代数</time><span style="flex:1">特征向量方向 · 错 1 次</span><span class="badge badge--warn">待复习</span></div>
+              <a class="btn btn-sm btn-block" href="mistakes.html" style="margin-top:12px">去错题库一键解答</a>
+            </div>
+            <div class="card-foot row row--between">
+              <span class="caption" data-board-count>今日 19 次 · 排队 1</span>
+              <span class="badge">错题 8 道</span>
+            </div>
+          </article>
+
+          <!-- 督学 -->
+          <article class="agent-board" data-agent="coach" data-state="busy">
+            <div class="agent-head">
+              <span class="agent-sigil" aria-hidden="true">C</span>
+              <span style="flex:1;min-width:0">
+                <span class="agent-name">督学 Agent</span>
+                <span class="agent-role">行为数据 · 拖延判定 · 复习计划</span>
+              </span>
+              <span class="badge" data-board-status>采集中</span>
+            </div>
+            <ul class="task-list">
+              <li class="task" data-state="running">
+                <span class="dot dot--live dot--pulse" data-task-dot></span>
+                <span class="task-body">
+                  <span class="task-title">按艾宾浩斯曲线刷新今晚复习计划</span>
+                  <span class="task-meta">依据：上次复习距今 31 小时</span>
+                </span>
+                <span class="badge" data-task-badge>进行中</span>
+              </li>
+              <li class="task" data-state="done">
+                <span class="dot dot--live" data-task-dot></span>
+                <span class="task-body">
+                  <span class="task-title">每日一句 · 已挂到首页与侧栏</span>
+                  <span class="task-meta">“今天先做 20 分钟，比计划 2 小时更值钱。”</span>
+                </span>
+                <span class="badge badge--success" data-task-badge>已完成</span>
+              </li>
+              <li class="task" data-state="queued">
+                <span class="dot dot--idle" data-task-dot></span>
+                <span class="task-body">
+                  <span class="task-title">学习状态简报 · 每周一 07:30 生成</span>
+                  <span class="task-meta">含拖延倾向、时段分布、建议</span>
+                </span>
+                <span class="badge" data-task-badge>排队</span>
+              </li>
+            </ul>
+            <div class="panel-body" style="border-top:1px solid var(--border-soft)">
+              <span class="caption">采集项 · 5 类行为</span>
+              <dl class="grid grid-2" style="margin-top:12px;gap:12px">
+                <div><dt class="caption">学习时长</dt><dd class="mono" style="margin:4px 0 0">4.2h / 周</dd></div>
+                <div><dt class="caption">做题数量</dt><dd class="mono" style="margin:4px 0 0">34 题</dd></div>
+                <div><dt class="caption">正确率</dt><dd class="mono" style="margin:4px 0 0">82%</dd></div>
+                <div><dt class="caption">提问情况</dt><dd class="mono" style="margin:4px 0 0">11 次</dd></div>
+              </dl>
+              <p class="body-sm body-muted" style="margin-top:12px">拖延倾向 <span class="badge badge--warn">低</span> · 周末学时偏低，已把复习前置到周三、周五。</p>
+            </div>
+            <div class="card-foot row row--between">
+              <span class="caption" data-board-count>今日 33 次 · 排队 1</span>
+              <span class="badge badge--success">数据完整</span>
+            </div>
+          </article>
+
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script src="js/shell.js" defer></script>
+<script src="js/app.js" defer></script>
+<script src="js/agents.js" defer></script>
+</body>
+</html>

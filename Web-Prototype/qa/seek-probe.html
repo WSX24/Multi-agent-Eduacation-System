@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>seek 探针</title></head><body>
+<video id="v" muted playsinline preload="auto" src="../build/media/final/motion-baked-desktop.mp4"></video>
+<pre id="o">-</pre>
+<script type="module">
+const v = document.getElementById('v'), o = document.getElementById('o');
+const log = m => { o.textContent += m + String.fromCharCode(10); };
+v.addEventListener('loadedmetadata', () => {
+  log('meta  duration=' + v.duration.toFixed(3) + '  seekable=' + v.seekable.length
+      + (v.seekable.length ? (' [' + v.seekable.start(0).toFixed(2) + '..' + v.seekable.end(0).toFixed(2) + ']') : ''));
+  v.currentTime = 4.0;
+});
+v.addEventListener('seeked', () => log('seeked  currentTime=' + v.currentTime.toFixed(4)));
+v.addEventListener('error', () => log('error  code=' + (v.error && v.error.code)));
+setTimeout(() => log('t+1.5s  currentTime=' + v.currentTime.toFixed(4) + '  readyState=' + v.readyState), 1500);
+setTimeout(() => { v.currentTime = 7.5; }, 2000);
+setTimeout(() => log('t+4.0s  currentTime=' + v.currentTime.toFixed(4) + '  readyState=' + v.readyState), 4000);
+</script></body></html>

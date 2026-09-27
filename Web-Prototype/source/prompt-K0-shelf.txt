@@ -1,0 +1,49 @@
+One wide illustration, 1024x768. A calm, bright library corner: a pale off-white bookshelf filled with books, and a dark faceted core resting in the right foreground.
+
+═══ BRIGHTNESS IS THE MOST IMPORTANT THING ═══
+This is a HIGH-KEY, VERY BRIGHT picture — think of a white room flooded with daylight, or an almost overexposed photograph.
+Concrete requirement: the overall image must be light. Most of the pixels — at least 60% of the whole image — must be brighter than #C8C8C8 (200 out of 255).
+The wall behind the shelf and the shelf itself are essentially WHITE, between #E8E6E1 and #F7F5F1. They are not grey, not mid-tone, not shaded down.
+The ONLY darker things in the image are: thin soft grey shadow lines where surfaces meet, and the single small dark slate core in the lower right.
+The DARKEST area anywhere must not be darker than a medium grey. No dark masses, no dark browns, no deep shadows, no dark corners, no dim room.
+Do not reduce the exposure anywhere to add mood. Do not let the picture settle into medium grey. Do not darken the walls, the floor or the shelf.
+
+═══ PALETTE — NEUTRAL ONLY, NO WOOD COLOUR ═══
+The bookshelf is NOT wood-coloured. It is made of matte, painted off-white board, very slightly warm, about #F0EEE9, with simple flat construction and only the faintest surface texture. No wood grain, no timber, no varnish.
+The books are cream, off-white, pale warm grey, light grey and muted slate blue-grey. Their spines are pale and quiet, with only thin grey decorative line work.
+The core is matte dark slate blue-grey, about #5A6472.
+This image contains NO saturated warm colour at all: no brown, no tan, no beige-brown, no mahogany, no walnut, no orange, no amber, no sepia.
+The ONLY colour permitted anywhere is a soft violet used later for light; in this frame it is at most a trace, well under 2% of the image.
+Also forbidden: red, orange, yellow, green, cyan.
+
+═══ THE BOOKSHELF ═══
+A tall, simple bookshelf of pale off-white painted board, seen from the front, filling most of the frame from the left edge to about three quarters across.
+Four or five shelves, evenly spaced, each shelf tightly filled with upright books, spines facing the camera.
+The books are ordinary hardbacks and paperbacks of many heights and thicknesses. A few spines carry thin decorative horizontal rules and small unreadable marks — line work only, absolutely no readable letters, words, numbers or symbols of any script.
+Shading is soft and light: a pale grey contact shadow where each shelf board meets the sides, and where books lean on each other. No dark crevices, no black gaps between books.
+
+═══ THE CORE (right foreground) ═══
+In the lower right of the frame, standing on the floor in front of the shelf, there is a low simple plinth of the same pale off-white board, about one sixth of the image height.
+Above the plinth floats a single faceted solid: a rounded polyhedron about the size of a human head, made of matte dark slate blue-grey material, like a cut stone or a compact machine component. It has visible flat facets catching the light, and a thin seam or band across its middle.
+It is NOT lit and NOT glowing in this frame. It is simply a dark, quiet object hanging in the air above the plinth. No light rays, no glow, no sparkle, no particles around it.
+
+═══ LIGHT ═══
+One soft, even, bright daylight key from the upper left. Strong gentle ambient bounce fills the whole room so that nothing goes dark.
+No dramatic shadows, no spotlight, no colour cast, no vignette, no dark corners, no falloff at the edges.
+Everything is matte: no gloss, no metal, no chrome, no glass, no plastic sheen, no varnish.
+
+═══ STYLE ═══
+Modern animated feature illustration. Soft volumetric shading, clean readable shapes, restrained detail, matte materials throughout. Quiet and orderly, with generous breathing room — not busy, not noisy.
+
+═══ CRITICAL FRAMING — 16:9 SAFE BAND ═══
+The canvas is 4:3 but the deliverable is cropped to 16:9. Keep every important element — the bookshelf, the plinth, the floating core — inside the central horizontal band that remains after cropping 96 pixels off the top and 96 pixels off the bottom.
+The top 96 pixels and the bottom 96 pixels are expendable margin: show only more plain wall and more plain floor there. Put no book, no shelf edge, no core and no important object in those two strips.
+
+═══ DO NOT ═══
+No text, no letters, no numbers, no readable characters, no symbols, no signage, no watermark, no border, no UI, no caption.
+No glow, no light rays, no beams, no sparkles, no particles, no dust motes in this frame — the light effect comes later, not here.
+No neon, no cyberpunk, no circuitry, no wires, no holograms, no screens, no sci-fi technology, no plastic AI clutter, no visual noise.
+No people, no hands, no animals, no second core, no duplicate objects.
+No brown, no dark wood, no timber shelf, no sepia, no warm colour cast, no heavy vignette, no moody lighting, no dark room.
+No pure black areas, no blown-out pure white areas.
+No fisheye, no dutch angle, no tilted horizon, no extreme perspective.

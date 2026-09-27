@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>orphan-sweep</title>
+<style>body{margin:0;font:12px/1.6 monospace}#out{white-space:pre;padding:12px}iframe{border:0;position:absolute;left:-9999px;top:0}</style>
+</head>
+<body>
+<!-- 全站标题孤行扫描：把每个 h1/h2/h3 放进真实页面里量，报告末行字数 ≤ 3 的标题。
+     这类「孤字行」在中文里一定是排版事故，除非作者显式用 .nb 声明过断点。 -->
+<pre id="out">pending</pre>
+<script>
+var PAGES = ['index.html','landing.html','auth.html','courses.html','course-detail.html',
+             'learning.html','generate.html','report.html','mistakes.html','agents.html',
+             'open-courses.html'];
+var WIDTHS = [1440, 390];
+var out = [], summary = {};
+var jobs = [];
+PAGES.forEach(function (p) { WIDTHS.forEach(function (w) { jobs.push([p, w]); }); });
+
+function lineBreak(doc, el) {
+  var nodes = [], wk = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT), lines = [], cur = '', lastTop = null;
+  while (wk.nextNode()) nodes.push(wk.currentNode);
+  if (!nodes.length) return [];
+  nodes.forEach(function (t) {
+    for (var i = 0; i < t.length; i++) {
+      var r = doc.createRange(); r.setStart(t, i); r.setEnd(t, i + 1);
+      var rect = r.getClientRects()[0];
+      if (!rect) { cur += t.data[i]; continue; }
+      var top = Math.round(rect.top);
+      if (lastTop === null || top === lastTop) cur += t.data[i];
+      else { lines.push(cur); cur = t.data[i]; }
+      lastTop = top;
+    }
+  });
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function next() {
+  if (!jobs.length) {
+    var done = Object.keys(summary).length + '/' + (PAGES.length * WIDTHS.length) + ' 个「页面 × 宽度」已量完';
+    document.getElementById('out').textContent =
+      (out.length ? out.join('\n') : '没有任何标题出现孤字行（末行 ≤ 3 字）') +
+      '\n\n' + done + '\n' +
+      Object.keys(summary).sort().map(function (k) { return '  ' + k + ': ' + summary[k]; }).join('\n');
+    return;
+  }
+  var job = jobs.shift(), page = job[0], width = job[1];
+  var f = document.createElement('iframe');
+  f.width = width; f.height = 1000; f.src = '../' + page;
+  f.onload = function () {
+    var doc = f.contentDocument;
+    doc.fonts.ready.then(function () {
+      setTimeout(function () {
+        var flags = [], scanned = 0, multi = 0;
+        Array.prototype.forEach.call(doc.querySelectorAll('h1, h2, h3'), function (h) {
+          var txt = (h.textContent || '').trim();
+          if (!/[\u4e00-\u9fff]/.test(txt)) return;
+          scanned++;
+          var lines = lineBreak(doc, h);
+          if (lines.length < 2) return;
+          multi++;
+          var last = Array.from(lines[lines.length - 1]).length;
+          if (last <= 3) flags.push('    ! 末行只有 ' + last + ' 字: «' + lines.join(' | ') + '»');
+        });
+        summary[page + ' @' + width + 'px'] = '中文标题 ' + scanned + ' 个，多行 ' + multi + ' 个';
+        if (flags.length) {
+          out.push(page + ' @' + width + 'px');
+          out = out.concat(flags);
+        }
+        f.remove(); next();
+      }, 250);
+    });
+  };
+  document.body.appendChild(f);
+}
+next();
+</script>
+</body></html>

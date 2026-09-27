@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智塾 · AI Teaching Platform — 网页原型索引</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<style>
+/* ── index.html · 原型索引样式 ───────────────────────────────────── */
+body.index { min-height: 100vh; }
+.idx-top {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-4) clamp(20px, 4vw, 56px);
+  background: color-mix(in oklch, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.idx-top .mark { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-lg); font-weight: 600; }
+.idx-top .mark small { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--meta); font-weight: 400; }
+.idx-top .spacer { flex: 1; }
+
+.idx-hero { padding: clamp(48px, 8vh, 104px) clamp(20px, 4vw, 56px) clamp(24px, 4vh, 48px); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: clamp(24px, 4vw, 56px); align-items: center; }
+.idx-hero h1 { font-size: clamp(34px, 5.4vw, 76px); letter-spacing: -0.04em; max-width: 20em; text-wrap: balance; }
+.idx-hero p { margin-top: var(--space-5); color: var(--muted); max-width: 56ch; line-height: 1.75; }
+.idx-hero .row { margin-top: var(--space-8); }
+.idx-robot { width: clamp(150px, 17vw, 230px); }
+.idx-robot .eye { fill: var(--accent); }
+.idx-robot .eye-glow { opacity: 1; }
+.idx-robot .antenna-tip { fill: var(--accent); }
+.idx-robot .visor-text { fill: var(--accent); }
+
+.idx-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-8); padding: 0 clamp(20px, 4vw, 56px) clamp(48px, 8vh, 96px); }
+.idx-item {
+  display: grid; grid-template-columns: 54px minmax(0, 1fr) auto auto;
+  gap: var(--space-4); align-items: center;
+  padding: var(--space-5) 0;
+  border-top: 1px solid var(--border);
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+.idx-item:hover { background: color-mix(in oklch, var(--fg) 3%, transparent); }
+.idx-item .n { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--meta); }
+.idx-item .t { font-size: var(--text-lg); font-weight: 600; }
+.idx-item .d { font-size: var(--text-sm); color: var(--muted); margin-top: 4px; max-width: 46ch; }
+.idx-item .go { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--accent); }
+.idx-item:hover .go { text-decoration: underline; }
+.idx-foot { padding: var(--space-6) clamp(20px, 4vw, 56px) var(--space-12); border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; font-family: var(--font-mono); font-size: 10px; color: var(--meta); letter-spacing: 0.08em; }
+
+@media (max-width: 900px) {
+  .idx-hero { grid-template-columns: minmax(0, 1fr); }
+  .idx-robot { display: none; }
+  .idx-grid { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+</head>
+<body class="index">
+
+<header class="idx-top">
+  <span class="mark">
+    <svg class="icon icon-lg" viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="3.5" width="13" height="11" rx="4.5"/><path d="M9 8.5h.01M15 8.5h.01M9.5 17.5h5M12 14.5v3M4 18.5h16"/></svg>
+    智塾<small>AI TEACHING PLATFORM</small>
+  </span>
+  <span class="spacer"></span>
+  <span class="caption">WEB PROTOTYPE · RESPONSIVE</span>
+</header>
+
+<section class="idx-hero">
+  <div>
+    <span class="eyebrow">多智能体教学系统 · 网页原型</span>
+    <h1 style="margin-top:12px"><span class="nb">四个 Agent，</span><span class="nb">一间不会下课的教室。</span></h1>
+    <p>教师 Agent 拆大纲，助教 Agent 批改并写学情报告，答疑 Agent 守错题库，督学 Agent 采集行为并把复习排进你的日程。下面是这套系统的完整界面链路，从欢迎页一路走到错题库。</p>
+    <div class="row row--wrap">
+      <a class="btn btn-primary btn-lg" href="landing.html">从欢迎页开始</a>
+      <a class="btn btn-lg" href="courses.html">直接进入我的课程</a>
+    </div>
+  </div>
+
+  <svg class="robot idx-robot" viewBox="0 0 220 200" role="img" aria-label="智塾机器人">
+    <defs><filter id="eyeGlowI" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="7"/></filter></defs>
+    <ellipse class="m-shadow" cx="110" cy="190" rx="64" ry="7"/>
+    <rect class="m-mid2" x="94" y="148" width="32" height="28" rx="10"/>
+    <rect class="m-light" x="58" y="174" width="104" height="16" rx="8"/>
+    <g class="robot-head">
+      <rect class="m-light" x="44" y="46" width="132" height="92" rx="38"/>
+      <rect class="m-mid" x="30" y="80" width="16" height="32" rx="8"/>
+      <rect class="m-mid" x="174" y="80" width="16" height="32" rx="8"/>
+      <line class="edge" x1="110" y1="46" x2="110" y2="22"/>
+      <circle class="antenna-tip" cx="110" cy="18" r="6"/>
+      <rect class="visor" x="60" y="66" width="100" height="54" rx="24"/>
+      <rect class="eye-glow" x="74" y="74" width="34" height="38" rx="17" fill="var(--accent)" filter="url(#eyeGlowI)"/>
+      <rect class="eye-glow" x="112" y="74" width="34" height="38" rx="17" fill="var(--accent)" filter="url(#eyeGlowI)"/>
+      <rect class="eye" x="81" y="82" width="20" height="22" rx="9"/>
+      <rect class="eye" x="119" y="82" width="20" height="22" rx="9"/>
+      <text class="visor-text" x="110" y="112" text-anchor="middle" style="font-size:8px">AI TEACHING</text>
+    </g>
+  </svg>
+</section>
+
+<main class="idx-grid">
+  <a class="idx-item" href="landing.html">
+    <span class="n">01</span>
+    <span><span class="t">欢迎页</span><span class="d" style="display:block">拖书架上的书进机器人脑子，眼睛亮起；滚轮向下，它跳下来挥手，「开始学习」出现。</span></span>
+    <span class="badge">动画</span><span class="go">landing.html →</span>
+  </a>
+  <a class="idx-item" href="auth.html">
+    <span class="n">02</span>
+    <span><span class="t">注册 / 登录</span><span class="d" style="display:block">登录与注册双模式、验证码倒计时、真实校验与错误态。</span></span>
+    <span class="badge">表单</span><span class="go">auth.html →</span>
+  </a>
+  <a class="idx-item" href="courses.html">
+    <span class="n">03</span>
+    <span><span class="t">我的课程</span><span class="d" style="display:block">默认页：学习状态、督学今日简报、助教最近批改、课程卡片筛选。</span></span>
+    <span class="badge">默认</span><span class="go">courses.html →</span>
+  </a>
+  <a class="idx-item" href="course-detail.html?id=ds&from=mine">
+    <span class="n">04</span>
+    <span><span class="t">课程详情</span><span class="d" style="display:block">简介 / 教学大纲 / 学习记录三档，含公开与私密切换、加入课程。</span></span>
+    <span class="badge">大纲</span><span class="go">course-detail.html →</span>
+  </a>
+  <a class="idx-item" href="generate.html">
+    <span class="n">05</span>
+    <span><span class="t">生成课堂</span><span class="d" style="display:block">对话式生成：教师形象、LLM 模型、教学周期左右可选，可创建自己的教师。</span></span>
+    <span class="badge">对话</span><span class="go">generate.html →</span>
+  </a>
+  <a class="idx-item" href="open-courses.html">
+    <span class="n">06</span>
+    <span><span class="t">公开课</span><span class="d" style="display:block">分类与难度筛选、搜索、加入课程后进入「我的课程」。</span></span>
+    <span class="badge">加入</span><span class="go">open-courses.html →</span>
+  </a>
+  <a class="idx-item" href="learning.html">
+    <span class="n">07</span>
+    <span><span class="t">正在学习</span><span class="d" style="display:block">三张进度条、艾宾浩斯复习计划、本周行为数据与拖延判定。</span></span>
+    <span class="badge">进度</span><span class="go">learning.html →</span>
+  </a>
+  <a class="idx-item" href="agents.html">
+    <span class="n">08</span>
+    <span><span class="t">Agent 运行态看板</span><span class="d" style="display:block">四条任务队列会自己推进；暂停后停住，看它们如何交接。</span></span>
+    <span class="badge">实时</span><span class="go">agents.html →</span>
+  </a>
+  <a class="idx-item" href="report.html">
+    <span class="n">09</span>
+    <span><span class="t">学情分析报告</span><span class="d" style="display:block">正确率趋势、薄弱点排序、掌握度分布、26 周热力图、督学简报。</span></span>
+    <span class="badge">数据</span><span class="go">report.html →</span>
+  </a>
+  <a class="idx-item" href="mistakes.html">
+    <span class="n">10</span>
+    <span><span class="t">错题库</span><span class="d" style="display:block">助教归纳的错题，一键解答逐条展开错因与正解，并可单独追问。</span></span>
+    <span class="badge">一键解答</span><span class="go">mistakes.html →</span>
+  </a>
+</main>
+
+<footer class="idx-foot">
+  <span>视觉系统：PERPLEXITY AI · 深色研究终端 / 单一紫色强调</span>
+  <span>响应式：桌面 1440 · 平板 820 · 手机 390</span>
+  <span>智塾 · MMXXVI</span>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "provider": "magic-hour",
+  "kind": "image",
+  "project_id": "cmui1ng1r06tkiw01oyi5x2kw",
+  "request": {
+    "name": "oil-motion keyframe 20260926-150404",
+    "image_count": 1,
+    "aspect_ratio": "16:9",
+    "resolution": "640px",
+    "model": "flux-schnell"
+  },
+  "model": "flux-schnell",
+  "resolution": "640px",
+  "aspect_ratio": "16:9",
+  "credits_charged": 5
+}

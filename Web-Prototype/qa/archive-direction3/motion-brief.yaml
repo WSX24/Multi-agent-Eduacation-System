@@ -1,0 +1,182 @@
+# ═══════════════════════════════════════════════════════════════════════
+# Motion Brief — 智塾 landing.html 首屏「一线」滚动一镜到底
+#
+# 事实源 #2。本文件只保存「由 Concept Contract 派生的生产计划」。
+# 合同字段（driver / time_control / background_owner / aspect_ratio /
+# continuity / destination）不在此复制，一律回到
+# source/concept-contract.yaml。
+#
+# 已授权的参数（路径、笔宽、缩放曲线、锚点、纸层）= source/line-spec.js。
+# 那是**唯一**一份，运行时读它，页面里不得再维护第二份常量。
+# 世界材料与光位 = source/scene-bible.md。
+# ═══════════════════════════════════════════════════════════════════════
+
+concept_contract: source/concept-contract.yaml
+line_spec: source/line-spec.js
+scene_bible: source/scene-bible.md
+
+# ── 参数空间与访问 ─────────────────────────────────────────────────────
+parameter_space: linear
+# 一条有起止的笔画与一次有起止的推轨，0→1。不是闭环（收笔处有回环但不接回起笔），
+# 不是二维采样，不是无序状态。
+
+media_access: random
+# **本路线不产生动画媒体，此字段实际上不适用**（写在这里是为了让缺失显式，
+# 而不是留空让人以为漏了）。画面由程序在 rAF 里实时绘制：纸是无限平铺的
+# 材质贴图，线是每帧重算的矢量轮廓带。没有帧文件、没有图集、没有视频，
+# 所以既不需要顺序访问也不需要随机访问。
+#
+# 这带来三个后果，都是本路线相对前三版的实质优势：
+#   · 没有编码产物 → 没有体积预算、没有码率权衡；
+#   · 没有帧链 → 没有接缝，verify-chain / verify-output-chain 不适用；
+#   · 没有固定画幅 → 桌面与移动端同一套实现，不存在 9:16 缺口。
+
+# ── 交付格式预算：不适用（显式记录，而不是留空） ───────────────────────
+delivery_budget: not-applicable
+# build/motion-budget.json **不存在，而且不应该存在**。
+# 理由：motion_budget.py 是在「有动画媒体」的前提下，在 alpha-atlas /
+# chroma-video / baked-video 之间做选择。本路线没有任何动画媒体 ——
+# 没有帧文件、没有视频、没有图集 —— 所以三个选项都没有对象。
+# 旧报告（方向 2 的 baked-video）已随该方案作废，移到
+# qa/archive-direction2/motion-budget.json。
+# 存档一份按旧参数算出来的报告，只会变成第二份事实源，所以不留。
+#
+# 若用户选择加入 §production_notes 里的可选生成片段（墨渗进纸纤维），
+# 届时应单独为那一段跑一次预算：background_owner=video → baked-video，
+# 结果写进独立报告，不覆盖本字段。
+
+# ── 手势策略 ───────────────────────────────────────────────────────────
+gesture_policy:
+  unit: continuous
+  # 滚轮位置本身就是「已画长度 + 摄影机位置」。
+  inertia: preserve
+  # 触摸板惯性滚动应该继续推进笔画 —— 这正是「我在落笔」的手感。
+  while_active: retarget
+  # 滚动中改向立即改向。往回滚 = 擦除 + 拉远，物理上成立。
+  boundary: clamp
+  # 滚到 0 停在起笔前（一张空白纸），滚到 1 停在收笔。
+  programmatic_navigation: ignore
+  # 首屏的 data-scroll-to 锚点导航与 resize 校正不得被当成用户滚动。
+  # 沿用现有 landing.js 的 window.scrollTo 做法（不用 scrollIntoView）。
+
+# ── 叙事顺序：笔画在同一时间线上依次画出 ───────────────────────────────
+storyboard:
+  - 起笔：右下角一张空白纸（有纤维与极淡稿线）。摄影机在最远处，整张纸在画面里
+  - 房间：透视房间的六条轮廓线依次画出，消失点落在纸心 (1200,800)
+  - 黑板：远端正中的一个小矩形（一点透视里远墙退化在消失点上）
+  - 左窗：左墙上的四边窗框与中棱
+  - 左排课桌：三张，由近及远，底边分别落在 y=1220/1100/980 的地板行上
+  - 右排课桌：三张，由远及近（镜像），中间留出收窄的走道
+  - 书架：右墙三层 L 形托架，逐层向消失点收
+  - 讲台：近景中央的梯形台面
+  - 那本书：讲台上摊开的书（两页弧 + 书脊 + 两行不可读的字）
+  - 河道：从书页中心落下去的一条纵向墨迹，此处开始转紫（路径 66% 处）
+  - 四道工序：河道两岸的四个符号（排大纲 / 批改 / 收错题 / 排复习）
+  - 收笔：一个小回环。摄影机已经拉远，整幅一笔画收进画面
+
+# ── 关键状态 ───────────────────────────────────────────────────────────
+keyframes: null
+# 本路线没有关键帧。前三版的关键帧存在的理由，是把「某个主体在某个时刻长什么样」
+# 用一张已验收的图钉死，以免视频模型漂移。本版没有需要钉的主体：
+# 线的形状是路径数据（常量），笔宽是曲线（常量），摄影机是函数（常量）。
+# 所以「关键状态」退化成**一组已授权的参数**，落在 source/line-spec.js。
+# 这不是省略，是把前三版里由图片承担的约束换成了由数值承担的约束。
+
+clip_chain: null
+# 本路线没有片段。全片是一条 path、一个 rAF、一个进度变量。
+# 前三版最贵的两道硬门（生成输入接力、成片输出接缝）在这里按构造不适用。
+
+rest_state: >-
+  滚动位置 0：一张完整的空白纸（纤维 + 极淡稿线 + 缓慢移动的光斑），
+  画面上没有任何墨。这是"落笔之前"，本身成立、可长时间停留，不是空状态。
+
+loop: none
+# 收笔的回环不接回起笔，不做闭环校验。
+
+anchor: center
+# 锚点 = 笔尖与纸心的加权点（tipBias 0.25 → 末期 1.0）。
+# 它由运动定义，不是需要逐帧维持的构图常量 —— 这是本版对前三版
+# 「中轴偏右」失败模式的正面回答。数值见 line-spec.js 的 anchor。
+
+scene_continuity: >-
+  见 source/scene-bible.md。跨帧必须锁定的只有三件事：纸的材质（纤维 + 宏观板
+  的合成比例）、墨的色值 #2a2a2e 与紫色的 #a855f7、以及光位。
+  因为全部由同一段代码逐帧生成，时间维度上的漂移在结构上不会发生 ——
+  没有编码、没有模型、没有两次生成之间的差异。
+  **唯一会随时间漂移的是缩放造成的贴图放大**，所以纸被拆成
+  「恒定不透明的分形纤维层」+「s>1.2 后淡出的宏观板层」两层。
+
+# ── 帧准备 ─────────────────────────────────────────────────────────────
+frame_policy: native
+# **不适用**：没有帧文件，没有帧率。画面是每帧重算的矢量，
+# 在任意刷新率下都是连续的。前三版的 interpolate/native 之争在这里不存在。
+# 代价挪到了另一处：轮廓带的采样密度（line-spec.js 的 samples = 520）。
+# 520 点铺在约 28.4k 单位长的路径上 ≈ 每 55 单位一个采样点，
+# 在最大缩放 1.6× 下相邻采样点相距约 88px，笔宽 4 单位 ≈ 6.4px，
+# 因此曲线段（书页的两个 C 弧）可能出现折线感。这是需要目视验收的一项。
+
+target_fps: null
+# 由设备刷新率决定（rAF）。不做任何帧率对齐。
+
+quality_target: >-
+  分辨率无关。矢量线在任意 DPR 下都是解析清晰的；唯一的位图是纸材质，
+  而它的放大上限由「宏观板 s>1.2 淡出 + 纤维板为分形」共同兜住。
+  纸材质板 1152×864（由 tools/grade_plate.py 调色），纤维板 1024×1024
+  （由 tools/make_fiber.py 生成，无缝自检通过）。
+  两者的绝对分辨率都不是本路线的清晰度瓶颈 —— 这是它相对前三版最实质的差别。
+
+aspect_ratio: custom
+# 见 Concept Contract。由宿主视口决定，没有任何固定画幅的媒体资产。
+
+reduced_motion: >-
+  prefers-reduced-motion: reduce 时：不绑定滚动，直接渲染最终状态 p=1
+  （整幅已完成的一笔画 + 收笔光点），并停止 rAF 循环与光斑视差。
+  只绘制一帧静态矢量，不动、不循环。
+
+# ── 生产顺序与验收 ─────────────────────────────────────────────────────
+production_notes:
+  - 本路线**不需要**任何生成素材的密钥或额度。已经产生的两份材质都是
+    一次性资产，命令可复现：
+      python tools/make_fiber.py --out source/paper-fiber.png --report qa/paper-fiber.json
+      python tools/grade_plate.py source/paper-texture.png \
+        --out source/paper-texture-graded.png --report qa/paper-texture-grade.json
+  - 改动 source/line-spec.js 之后必须重跑**两条正交的硬门**（六帧）：
+      # 截图。--screenshot 必须给绝对路径，否则 Chrome 报
+      # 「系统找不到指定的路径」。?p= 是 QA 钩子，正常访问不走它。
+      chrome --headless=new --disable-gpu --hide-scrollbars \
+        --virtual-time-budget=6000 --window-size=1600,900 \
+        --screenshot=<abs>/qa/page-p<p>.png \
+        "http://localhost:8807/landing.html?p=<p>"
+      # 几何门要另取一张把装饰层关掉的（?chrome=0）：字标 #0f0f10 与
+      # 进度条 --accent（亮度约 101）都会被算成「墨」，把重心带偏 30–50px。
+      chrome --headless=new --disable-gpu --hide-scrollbars \
+        --virtual-time-budget=6000 --window-size=1600,900 \
+        --screenshot=<abs>/qa/geo-p<p>.png \
+        "http://localhost:8807/landing.html?p=<p>&chrome=0"
+      # 色调门：纸对不对（亮纸占比 / p95 / 过曝 / 紫色面积）
+      python tools/verify_scene.py qa/page-p<p>.png --no-axis
+      # 几何门：画在哪（交并比 / 面积比 / 重心），并对照带装饰的那张
+      python tools/verify_geometry.py qa/geo-p<p>.png --p <p> \
+        --compare qa/page-p<p>.png
+    两条门必须都跑，它们管的是正交的两件事。只有色调门是危险的：
+    css/base.css 的全局 `img, svg { max-width: 100% }` 曾把墨层坐标压成
+    0.667 倍并居中，六张色调截图全部通过而整幅画在错的位置
+    （墨覆盖率 4.5% → 1.8%）。是几何门（IoU 0.925 → 0.015）与草稿台对照
+    才发现的。见 qa/integration.md §7。
+  - 两条门当前全部通过。色调门的临界项是亮纸占比与亮度 95 分位
+    （纸的均值约 228–239，任何加深纸的处理都会先撞这两条）；
+    几何门的校准过程与阈值扫描见 qa/geometry-calibration.md。
+    与亮度 95 分位：纸的均值约 228–239，任何加深纸的处理都会先撞这两条。
+  - 运行时已接入真实页面（2026-09-26）：js/line-runtime.js + js/landing.js，
+    landing.html 首屏即唯一宿主。验收记录见 qa/integration.md。
+  - 构建产物**已完成**（2026-09-26）：tools/build_line.py 由 source/line-spec.js
+    生成 build/line-runtime-data.js（等弧长采样点 / 法线 / 笔宽 / 速度补偿积分表），
+    页面只读产物。--check 可校验「改了源忘了重建」。
+    几何已与浏览器自己的 getTotalLength 交叉校验：长度相对差 0.0000%。
+    见 qa/integration.md §6。
+  - 待用户确认的数值（见 qa/prototype-line.md）：底稿默认值（现为 off）、
+    滚动行程 600vh、最深缩放 1.6×。
+  - 可选增强（用户尚未表态）：在"墨线钻进纸里"那一刻插入一段生成的
+    「墨渗进纸纤维」素材，用 concepts.md 的实体遮挡转场进出。这是本路线
+    唯一可能用到生成媒体的地方；若采用，它是 background_owner=video 的
+    短片段，按 baked-video 单独预算，不进入本条时间轴。

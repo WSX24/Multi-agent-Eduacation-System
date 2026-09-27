@@ -1,0 +1,15 @@
+Use the supplied reference image as the exact scene, composition, materials, palette, lighting direction and exposure reference. Keep everything about it unchanged: the same pale off-white bookshelf at the same position and scale, the same books with the same spines in the same order, the same plain near-white wall and floor, the same low plinth and the same dark slate faceted core floating above it in the lower right at the same size and place, the same soft even daylight from the upper left, the same high-key bright exposure.
+
+Change exactly ONE thing: light is now appearing on the books.
+
+Thin, precise edges of soft violet-white light run along the outer edges of many of the book spines, one clean hair-thin line per glowing spine, brightest right at the spine edge and fading within a few millimetres. The glow has spread across most of the shelves, book by book, sparse and even. A few spines are still unlit, so the distribution looks natural rather than uniform.
+
+The light is thin, quiet and exact: hair-thin lines along spine edges only. It is not a haze, not a fog, not a soft bloom, not a wash over the shelf.
+
+The light has not left the books yet: no filaments detaching, no rays in the air, no beams crossing the room, no light on the floor, no light touching the core. The core stays exactly as before: dark, unlit, motionless.
+
+The books and the bookshelf are completely unchanged in shape and position: no book opens, none slides out, none falls, no shelf moves. Camera unchanged, same framing, same distance.
+
+Bright, airy, high-key. Matte illustration, soft volumetric shading, restrained detail.
+
+No text, no letters, no numbers, no readable characters, no watermark, no border, no UI. No neon, no cyberpunk, no circuitry, no wires, no holograms, no screens. No beams, no rays crossing the frame, no god-rays, no particles, no sparkles, no dust, no fog, no haze. No brown, no dark wood, no sepia, no warm cast, no vignette, no darkening. No extra books, no missing books, no second core, no hands, no people. No camera change, no reframing, no zoom.

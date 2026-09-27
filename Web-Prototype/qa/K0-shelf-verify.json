@@ -1,0 +1,87 @@
+{
+  "source": "source\\K0-shelf.png",
+  "fps": 1.0,
+  "frames": [
+    {
+      "size": [
+        1152,
+        648
+      ],
+      "aspect": 1.7778,
+      "purpleCover": 0.00088,
+      "slateCover": 0.02496,
+      "otherChromaCover": 0.25438,
+      "forbidden": {
+        "red": 0.02373,
+        "orange": 0.22928,
+        "yellow": 0.0,
+        "green": 0.0,
+        "cyan": 0.0
+      },
+      "nearBlackFrac": 1e-05,
+      "nearWhiteFrac": 0.0,
+      "darkest": 9,
+      "brightest": 255,
+      "meanLuma": 182.4,
+      "paperFrac": 0.36954,
+      "paperP95": 244.0,
+      "lumaStd": 56.1,
+      "corridorX": 0.5425,
+      "corridorGap": 0.9376,
+      "inkCentroidX": 0.4058,
+      "mirrorDelta": 52.61,
+      "t": 0.0,
+      "problems": [
+        "未分类彩色面积 25.44% > 1%",
+        "禁用色相 red 面积 2.37% > 1.00%（红笔只在 seg-03 允许，且需传 --allow-red）",
+        "禁用色相 orange 面积 22.93% > 1.00%"
+      ],
+      "warnings": []
+    }
+  ],
+  "worst": {
+    "size": [
+      1152,
+      648
+    ],
+    "aspect": 1.7778,
+    "purpleCover": 0.00088,
+    "slateCover": 0.02496,
+    "otherChromaCover": 0.25438,
+    "forbidden": {
+      "red": 0.02373,
+      "orange": 0.22928,
+      "yellow": 0.0,
+      "green": 0.0,
+      "cyan": 0.0
+    },
+    "nearBlackFrac": 1e-05,
+    "nearWhiteFrac": 0.0,
+    "darkest": 9,
+    "brightest": 255,
+    "meanLuma": 182.4,
+    "paperFrac": 0.36954,
+    "paperP95": 244.0,
+    "lumaStd": 56.1,
+    "corridorX": 0.5425,
+    "corridorGap": 0.9376,
+    "inkCentroidX": 0.4058,
+    "mirrorDelta": 52.61,
+    "t": 0.0,
+    "problems": [
+      "未分类彩色面积 25.44% > 1%",
+      "禁用色相 red 面积 2.37% > 1.00%（红笔只在 seg-03 允许，且需传 --allow-red）",
+      "禁用色相 orange 面积 22.93% > 1.00%"
+    ],
+    "warnings": []
+  },
+  "passed": false,
+  "manualReview": [
+    "中轴消失点是否真的在画面中心（脚本的两个 x 只是代理指标，人眼定案）",
+    "材料：一眼能否指认出「纸 / 墨 / 木」中的至少两种",
+    "是否误入霓虹数据走廊 / 赛博朋克 / 写实 CGI（scene-bible §5 第 1–3 条）",
+    "画面里是否有任何可读的文字、数字、UI、水印（第 5 条）",
+    "机器人的身份锚点是否与 identity-bible §2/§3 一致（仅 K0 / K4 需要）",
+    "16:9 裁切上下边界有没有切到构图锚点（合同「安全裁切策略」第 4 条）"
+  ]
+}
