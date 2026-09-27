@@ -5,7 +5,7 @@
 这是最早写的模板，也是唯一从未被真实验证过的：我修过它的渲染 bug
 （``branch_rule`` 曾被 prompt_builder 静默丢弃），但**从未验证修复后分支是否真的生效**。
 
-  H1  条件分支真实生效：入门 / 基础 / 进阶 / 竞赛 四档输出应有实质差异
+  H1  条件分支真实生效：入门 / 基础 / 中等 / 进阶 / 竞赛 五档输出应有实质差异
   H2  need_example=false 时例题模块改写，其余照常
   H3  5 个模块齐全且顺序正确
   H4  无 LaTeX 记号
@@ -50,10 +50,23 @@ LATEX = ["\\frac", "\\times", "\\div", "\\cdot", "\\[", "\\]", "\\(", "\\)", "\\
 # 档位判据：入门看是否通俗化，进阶/竞赛看例题是否升级为多步综合题。
 # 注意：不要用「综合/陷阱/难题」这类关键词——实测模型是**示范**高阶难度而非**标注**它，
 # 关键词判据会误判（第 7 次尺子事故）。改用可观测的步骤数。
+# 档位顺序即难度梯度。差分检查的档位对**从元组派生**，不手写：
+# 之前手写的四对里没有「中等」——档位被漏掉时，对比也一起被漏掉，两头都不报错。
+BANDS = ("入门", "基础", "中等", "进阶", "竞赛")
+
+
+def band_pairs() -> list[tuple[str, str]]:
+    """相邻档位对 + 首尾对。"""
+    return list(zip(BANDS, BANDS[1:])) + [(BANDS[0], BANDS[-1])]
+
+
 BAND_EXPECT = {
     "入门": {"must_any": ["比喻", "好比", "就像", "相当于", "生活", "通俗", "简单"],
              "must_not": ["竞赛", "跨知识点综合", "陷阱"], "min_steps": 0},
     "基础": {"must_any": [], "must_not": [], "min_steps": 0},
+    # 中等档不给关键词断言：「变式」一词在进阶档的分支里也出现，用它做判据会两头误判。
+    # 中等分支是否真生效，交给 main() 的差分断言（中等 vs 基础 相似度 < 0.8）去证。
+    "中等": {"must_any": [], "must_not": [], "min_steps": 0},
     # 注意：步骤数只是「例题做了多步演示」的低门槛，**不是难度代理**——
     # 实测竞赛档 3 步、进阶档 8 步，并不递增。真正证明分支生效的是
     # main() 里的差分断言（四档两两相似度均 < 0.8）。
@@ -76,6 +89,7 @@ def example_steps(bodies: dict) -> int:
 CASES = {
     "入门": {"学科": "初中物理", "知识点": "欧姆定律", "学生水平": "入门", "need_example": "true", "band": "入门"},
     "基础": {"学科": "初中物理", "知识点": "欧姆定律", "学生水平": "基础", "need_example": "true", "band": "基础"},
+    "中等": {"学科": "初中物理", "知识点": "欧姆定律", "学生水平": "中等", "need_example": "true", "band": "中等"},
     "进阶": {"学科": "初中物理", "知识点": "欧姆定律", "学生水平": "进阶", "need_example": "true", "band": "进阶"},
     "竞赛": {"学科": "初中物理", "知识点": "欧姆定律", "学生水平": "竞赛", "need_example": "true", "band": "竞赛"},
     "noex": {"学科": "初中物理", "知识点": "欧姆定律", "学生水平": "基础", "need_example": "false", "band": "基础"},
@@ -228,24 +242,25 @@ def main() -> None:
     print("\n" + "=" * 72)
     print("差分检查：同知识点 / 只改学生水平（验证 branch_rule 是否真生效）")
     print("=" * 72)
-    for a, b in (("入门", "基础"), ("基础", "进阶"), ("进阶", "竞赛"), ("入门", "竞赛")):
+    for a, b in band_pairs():
         if a in bodies_by_band and b in bodies_by_band:
             r = difflib.SequenceMatcher(None, bodies_by_band[a], bodies_by_band[b]).ratio()
             print(f"  {'✅' if r < 0.8 else '⚠️ '} {a:4s} vs {b:4s} 相似度 {r:.2f}")
     print("")
     print("  各档例题步骤数（仅供参考，非难度代理）：")
-    for n_ in ("入门", "基础", "进阶", "竞赛"):
+    for n_ in BANDS:
         if n_ in bodies_by_band:
             _, bd = split_sections(bodies_by_band[n_])
             print(f"    {n_:4s} {example_steps(bd):>2d} 步   正文 {len(bodies_by_band[n_]):>5d} 字符")
 
     diff_fail = []
-    for a, b in (("入门", "基础"), ("基础", "进阶"), ("进阶", "竞赛"), ("入门", "竞赛")):
+    for a, b in band_pairs():
         if a in bodies_by_band and b in bodies_by_band:
             r = difflib.SequenceMatcher(None, bodies_by_band[a], bodies_by_band[b]).ratio()
             if r >= 0.8:
                 diff_fail.append(a + "/" + b + "=" + format(r, ".2f"))
-    print("  " + ("OK " if not diff_fail else "WARN ") + "H1 四档输出互不相似(<0.8) " + str(diff_fail))
+    print("  " + ("OK " if not diff_fail else "WARN ")
+          + f"H1 {len(BANDS)} 档输出互不相似(<0.8) " + str(diff_fail))
     print("\n" + "=" * 72)
     print("汇总")
     print("=" * 72)
