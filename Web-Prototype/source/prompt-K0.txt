@@ -1,0 +1,104 @@
+BACKGROUND FIRST — this single requirement overrides everything else in this brief.
+The image is a cut-out character floating in an empty white void.
+- The entire background is ONE uniform, flat, pure white field: hex #FFFFFF, edge to edge, corner to
+  corner, top to bottom.
+- There is NO ground, NO surface, NO floor plane, NO horizon line, NO table, NO stage, NO backdrop,
+  NO wall.
+- There is NO shadow of any kind: no drop shadow, no contact shadow, no ambient occlusion, no soft
+  darkening under the feet, no grounding ellipse.
+- There is NO gradient, NO vignette, NO radial falloff, NO warm or cool wash, NO grey tint, NO colour
+  cast, NO paper texture, NO noise, NO grain, NO paper tooth, NO glow, NO halo, NO bloom, NO light
+  spill, NO reflection, NO mirror image.
+- Every single pixel outside the character's silhouette is exactly #FFFFFF, including the pixels
+  directly underneath the feet and directly around the head. Imagine the character was cut out with
+  scissors and pasted onto blank white paper.
+- Do not draw a frame, border, card, panel or stage of any kind.
+
+A single robot character in the style of a modern Western animated feature film. Square 1:1 image.
+
+STYLE — modern Western feature animation, not flat vector art.
+- The character design language of big American animated features: appealing, rounded, chunky, full of
+  volume and weight. Soft dimensional modelling, not flat colour fills.
+- Soft volumetric shading: smooth gradients across every curved surface, gentle ambient occlusion only
+  in the crevices where parts meet, a broad soft key light with a modest warm bounce from below. Edges
+  of curved forms must roll off gradually into shadow, never snap to a hard cel step.
+- Soft highlights: one broad soft sheen across the top of the head shell and the shoulder caps, plus one
+  crisp specular dot on each eye. No chrome, no mirror reflection.
+- Surface: matte painted metal with a subtle fine grain, plus a slightly darker softer material on the
+  joints and the soles. A little friendly wear is allowed on the lower body only. Nothing grungy, nothing
+  damaged, nothing dirty.
+- ABSOLUTELY NOT: flat cel shading, hard flat shadow shapes, thick uniform cartoon outlines around every
+  form, vector clip-art look, anime, manga, pixel art, retro 8-bit, glossy plastic toy, photorealistic
+  industrial robot, military mech, Gundam, Transformers, hard-surface sci-fi concept art, steampunk.
+
+SUBJECT — exactly one robot. No second unit, no duplicate, no reflection, no shadow copy.
+A friendly compact teaching robot. Design language: appealing family-animation character first, machine
+second. Head-to-body ratio about 1 : 2.4, so the head is large and dominant. The head is a big rounded
+shell — an egg-like dome with a soft muzzle plane at the front, corners fully rounded, nothing sharp.
+Below it a short stocky torso with a visible chest plate, then two short thick legs with chunky
+boot-like feet, and two short arms with rounded three-fingered hands. The silhouette must read as ONE
+appealing blob first, with limbs as thick soft shapes, not thin sticks. No exposed pistons, no cables,
+no protruding screws. Joints read as soft dark ball joints at the shoulders, elbows, hips and knees.
+
+GEOMETRY — reproduce these proportions exactly. Coordinates are fractions of the canvas, origin at the
+top-left, x to the right, y downward. These numbers ARE the character's identity, and the page's drag
+target and eye flash are positioned from them — do not approximate.
+- The soles of the feet sit at y = 0.90. Leave the bottom 10% of the canvas as clean empty white.
+- The body's vertical centre axis is at x = 0.50 and the character is symmetric about it.
+- Overall standing height: from y = 0.10 (top of the head, including the hatch lid) to y = 0.90
+  (soles) — total height 0.80 of the canvas.
+- Head: height 0.31 (y 0.10 to 0.41), width 0.38 (x 0.31 to 0.69).
+- Neck: a short dark collar, almost hidden, y 0.41 to 0.44.
+- Torso: height 0.25 (y 0.44 to 0.69), width 0.31 (x 0.345 to 0.655). A wide chest plate on the front
+  spanning x 0.38 to 0.62 and y 0.46 to 0.62.
+- Legs: length 0.21 (y 0.69 to 0.90), two short thick legs, soft dark ball joints at hips and knees,
+  chunky boot-like feet.
+- Arms span y 0.455 to 0.735, angled slightly outwards; at rest the outer edge of each arm reaches
+  x = 0.265 and x = 0.735. Rounded mitt-like hands with three soft fingers.
+- EYES — these carry the whole personality. Two large rounded dome lenses set into the front of the
+  head, centred vertically at y = 0.29 and symmetric about x = 0.50. Each eye is 0.095 wide and 0.05
+  tall, inner edges at x = 0.458 and x = 0.542. Each eye is a dark glassy dome with a bright teal iris
+  ring and a soft dark pupil, one crisp white specular dot at the upper left, and a soft dark rim where
+  the dome meets the shell so the face can emote. The eyes must read clearly as eyes: bright, alert,
+  curious, friendly.
+- HATCH: a rounded lid on the crown, centred at x = 0.50, y = 0.135, about 0.27 wide and 0.026 tall.
+  Closed, it reads as a single horizontal seam across the crown with a thin darker inset line, same
+  shell material as the head. Its front edge is visible from the front.
+- SIZE LIMIT. The complete character must fit entirely inside x 0.20 to x 0.80 and y 0.08 to y 0.92,
+  occupying roughly 60% of the canvas width, not more. Do not zoom in. Do not crop. Do not let the
+  character touch or cross any canvas edge.
+
+COLOUR — must read strongly against pure white.
+- The shell must NOT be white or ivory: it sits on a pure white page, so a light shell would vanish.
+- The shell is a soft slate blue-grey with full volumetric range: lit top #7B87A6, base #4E5877, shadow
+  #2B3145, deepest crevices #1B1E28. Largest area. It must stay clearly mid-range, never dropping to
+  black across large areas.
+- The under-shell, joint balls, neck collar and soles are a deep cool charcoal #262A36.
+- The chest plate is a deeper slate #333B52 with a soft inner teal glow.
+- Accent trim on the shoulders, hatch rim and boot edges is a soft teal #4FB3A0, used sparingly.
+- The eye iris is a bright teal #3FD0B4 with a real glow, over a dark #12242A dome.
+- Warm beige #D8BA95 only as a thin accent line along the hatch rim and the boot soles.
+- Three colour families only: slate blue-grey, deep charcoal, teal. No fourth hue.
+- No purple or violet anywhere. Every large surface stays clearly darker than white across all of its
+  shading, so the silhouette reads positively.
+
+LIGHTING.
+- One broad soft key light from above and slightly to the left (about -20 degrees azimuth, 35 degrees
+  elevation), fairly large and soft so the terminator is a smooth gradient.
+- A modest warm bounce from the lower right at about 35% of the key intensity, filling the underside of
+  the head, arms and torso. The bounce lights the CHARACTER ONLY — it must not tint or warm the
+  background in any way.
+- A subtle cool highlight rolling over the top of the head and the outer edges of the arms, staying on
+  the shell itself. Never a bright outline stroke, and never as light as the white background.
+- Lighting describes the character only. It must not cast or spill anything onto the background.
+
+NEGATIVE — none of the following may appear.
+No background of any kind: no gradient, no vignette, no wash, no shadow, no ground, no floor, no
+horizon, no stage, no frame, no border, no panel, no reflection. No second robot, no duplicate, no
+mirror twin. No missing or extra limb, no extra finger, no added antenna, screen, wheel, backpack or
+second hatch. No text, numbers, letters, subtitle, watermark, signature. No UI. No purple or violet.
+No flat cel shading, no hard cartoon outline strokes, no vector clip-art, no anime, no manga, no pixel
+art, no glossy toy plastic, no chrome, no brushed metal, no photorealistic industrial robot, no military
+mech, no Gundam, no Transformers, no hard-surface sci-fi concept art, no glowing thin circuit lines, no
+mechanical wires or cables, no dense surface noise, no hyperdetailed 8k clutter, no meaningless
+decorative parts. Do not zoom in or crop the character. Do not let it touch the canvas edges.

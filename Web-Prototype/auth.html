@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录 / 注册 · 智塾</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/auth.css">
+</head>
+<body class="auth">
+
+<div class="shell-simple">
+
+  <!-- ─── 品牌侧 ─────────────────────────────────────────────────── -->
+  <section class="auth-side" data-od-id="auth-brand">
+    <a class="brand" href="landing.html">
+      <span class="brand-mark" aria-hidden="true">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="5.5" y="3.5" width="13" height="11" rx="4.5"/><path d="M9 8.5h.01M15 8.5h.01M9.5 17.5h5M12 14.5v3M4 18.5h16"/></svg>
+      </span>
+      <span class="brand-name">智塾<small>AI TEACHING PLATFORM</small></span>
+    </a>
+
+    <div class="auth-headline">
+      <h1>回到你的课堂。<br>专属学习团队已经就位。</h1>
+      <p>和智能教师对话，打造你的个性化课堂。完整的教学周期，配套习题，学情跟踪，错题归纳</p>
+      <div class="auth-facts">
+        <div class="auth-fact"><span class="k">T</span>教师 · 大纲与任务</div>
+        <div class="auth-fact"><span class="k">A</span>助教 · 批改与学情报告</div>
+        <div class="auth-fact"><span class="k">Q</span>答疑 · 错题库与同类型题</div>
+        <div class="auth-fact"><span class="k">C</span>督学 · 复习计划与简报</div>
+      </div>
+    </div>
+
+    <div class="auth-mini" aria-hidden="true">
+      <!-- 位图来自用户 2026-09-27 指定的截图，已抠成透明 PNG
+           （见 tools/prepare_robot_asset.py：底色极平，量完取阈值 250，
+           只删与边界连通的部分，图内浅色全保留）。
+           换成 <img> 后就不再吃 --accent 那几个令牌了。 -->
+      <img src="assets/robot-auth.png" alt="" width="359" height="573" decoding="async">
+    </div>
+
+    <div class="auth-foot">智塾 · MMXXVI</div>
+  </section>
+
+  <!-- ─── 表单侧 ─────────────────────────────────────────────────── -->
+  <section class="auth-main" data-od-id="auth-form">
+    <div class="auth-card">
+      <div class="tabs" role="tablist" data-tabs="auth">
+        <button class="tab" role="tab" data-tab="login" aria-selected="true">登录</button>
+        <button class="tab" role="tab" data-tab="register" aria-selected="false">注册</button>
+      </div>
+
+      <!-- 登录 -->
+      <div data-panel="login" data-panel-group="auth">
+        <h2>欢迎回来</h2>
+        <p class="sub">用邮箱继续你的学习计划。</p>
+
+        <form class="auth-form" id="loginForm" novalidate>
+          <div class="field">
+            <label for="loginEmail">邮箱</label>
+            <input id="loginEmail" type="email" autocomplete="email" placeholder="you@example.com" value="student@zhishu.ai">
+            <p class="field-error" id="loginEmailError" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="loginPassword">密码</label>
+            <input id="loginPassword" type="password" autocomplete="current-password" placeholder="至少 8 位" value="zhishu2026">
+            <p class="field-error" id="loginPasswordError" hidden></p>
+          </div>
+
+          <div class="field" id="loginCodeField" hidden>
+            <label for="loginCode">验证码</label>
+            <div class="auth-row">
+              <input id="loginCode" inputmode="numeric" placeholder="6 位数字">
+              <span class="auth-code-timer" id="loginCodeTimer">已发送 · 60s</span>
+            </div>
+            <p class="field-error" id="loginCodeError" hidden></p>
+          </div>
+
+          <div class="auth-actions">
+            <button class="btn btn-primary btn-lg btn-block" type="submit">登录</button>
+            <div class="auth-alt">
+              <button type="button" id="toggleCodeMode">使用验证码登录</button>
+              <a href="#" onclick="return false">忘记密码</a>
+            </div>
+          </div>
+          <p class="auth-note">原型提示：已预填演示账号，任意合法邮箱 + 8 位以上密码即可进入「我的课程」。</p>
+        </form>
+      </div>
+
+      <!-- 注册 -->
+      <div data-panel="register" data-panel-group="auth" hidden>
+        <h2>创建账号</h2>
+        <p class="sub">先生成第一门课，再决定要不要长期班。</p>
+
+        <form class="auth-form" id="registerForm" novalidate>
+          <div class="field">
+            <label for="regName">昵称</label>
+            <input id="regName" placeholder="小 T" autocomplete="nickname">
+            <p class="field-error" id="regNameError" hidden></p>
+          </div>
+          <div class="field">
+            <label for="regEmail">邮箱</label>
+            <input id="regEmail" type="email" placeholder="you@example.com" autocomplete="email">
+            <p class="field-error" id="regEmailError" hidden></p>
+          </div>
+          <div class="field">
+            <label for="regPassword">密码</label>
+            <input id="regPassword" type="password" placeholder="至少 8 位，含数字" autocomplete="new-password">
+            <p class="field-hint">强度：弱 · 中 · 强</p>
+            <p class="field-error" id="regPasswordError" hidden></p>
+          </div>
+          <div class="field">
+            <label for="regCode">邮箱验证码</label>
+            <div class="auth-row">
+              <input id="regCode" inputmode="numeric" placeholder="6 位数字">
+              <button class="btn" type="button" id="sendCodeBtn">发送验证码</button>
+            </div>
+            <p class="field-error" id="regCodeError" hidden></p>
+          </div>
+
+          <div class="field">
+            <label>先学什么？<span class="caption" style="margin-left:6px">可多选，教师 Agent 会据此排大纲</span></label>
+            <div class="auth-goals" id="goalGroup" data-chip-group data-multi>
+              <button class="chip" type="button">数据结构与算法</button>
+              <button class="chip" type="button">机器学习</button>
+              <button class="chip" type="button">英语写作</button>
+              <button class="chip" type="button">考研数学</button>
+              <button class="chip" type="button">编译原理</button>
+            </div>
+          </div>
+
+          <label class="switch" style="margin-top:20px">
+            <input type="checkbox" id="regAgree" checked>
+            <span class="track" aria-hidden="true"></span>
+            <span>我已阅读并同意《服务条款》与《隐私政策》</span>
+          </label>
+
+          <div class="auth-actions">
+            <button class="btn btn-primary btn-lg btn-block" type="submit">注册并生成第一门课</button>
+          </div>
+          <p class="auth-note">注册即代表你同意让督学 Agent 采集学习时长、做题量与正确率，用于生成学情报告。</p>
+        </form>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="js/app.js" defer></script>
+<script>
+/* ── auth.html · 表单校验与登录/注册流程 ───────────────────────────── */
+(function () {
+  'use strict';
+  var EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  function showError(id, message) {
+    var el = document.getElementById(id);
+    if (!el) return false;
+    el.textContent = message || '';
+    el.hidden = !message;
+    return !message;
+  }
+  function shake(input) {
+    if (!input) return;
+    input.focus();
+    input.style.borderColor = 'var(--danger)';
+    window.setTimeout(function () { input.style.borderColor = ''; }, 1400);
+  }
+  function enter(email) {
+    try { localStorage.setItem('zhishu:user', email); } catch (e) {}
+    window.location.href = 'courses.html';
+  }
+
+  /* 登录 */
+  var loginForm = document.getElementById('loginForm');
+  var codeMode = false;
+  document.getElementById('toggleCodeMode').addEventListener('click', function () {
+    codeMode = !codeMode;
+    document.getElementById('loginCodeField').hidden = !codeMode;
+    document.getElementById('loginPassword').closest('.field').hidden = codeMode;
+    this.textContent = codeMode ? '使用密码登录' : '使用验证码登录';
+    if (codeMode) {
+      var t = document.getElementById('loginCodeTimer');
+      t.textContent = '已发送 · 60s';
+      var left = 60;
+      var timer = window.setInterval(function () {
+        left--;
+        t.textContent = left > 0 ? '已发送 · ' + left + 's' : '重新发送';
+        if (left <= 0) window.clearInterval(timer);
+      }, 1000);
+    }
+  });
+
+  loginForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var email = document.getElementById('loginEmail');
+    var pass = document.getElementById('loginPassword');
+    var code = document.getElementById('loginCode');
+    var ok = true;
+    ok = showError('loginEmailError', EMAIL.test(email.value.trim()) ? '' : '请输入有效的邮箱地址') && ok;
+    if (!ok) shake(email);
+    if (codeMode) {
+      if (!/^\d{6}$/.test(code.value.trim())) { showError('loginCodeError', '请输入 6 位数字验证码'); shake(code); return; }
+      showError('loginCodeError', '');
+    } else {
+      var passOk = pass.value.length >= 8;
+      ok = showError('loginPasswordError', passOk ? '' : '密码至少 8 位') && ok;
+      if (!passOk) shake(pass);
+    }
+    if (!ok) return;
+    this.querySelector('button[type="submit"]').textContent = '正在进入…';
+    window.setTimeout(function () { enter(email.value.trim()); }, 480);
+  });
+
+  /* 注册 */
+  var sendBtn = document.getElementById('sendCodeBtn');
+  sendBtn.addEventListener('click', function () {
+    var email = document.getElementById('regEmail');
+    if (!EMAIL.test(email.value.trim())) { showError('regEmailError', '先填一个有效邮箱'); shake(email); return; }
+    showError('regEmailError', '');
+    var left = 60;
+    sendBtn.disabled = true;
+    sendBtn.textContent = left + 's 后重发';
+    var timer = window.setInterval(function () {
+      left--;
+      sendBtn.textContent = left > 0 ? left + 's 后重发' : '发送验证码';
+      if (left <= 0) { window.clearInterval(timer); sendBtn.disabled = false; }
+    }, 1000);
+    if (window.zhishuToast) window.zhishuToast('验证码已发送（原型：任意 6 位数字可通过）');
+  });
+
+  document.getElementById('registerForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = document.getElementById('regName');
+    var email = document.getElementById('regEmail');
+    var pass = document.getElementById('regPassword');
+    var code = document.getElementById('regCode');
+    var agree = document.getElementById('regAgree');
+    var ok = true;
+    ok = showError('regNameError', name.value.trim().length >= 2 ? '' : '昵称至少 2 个字') && ok;
+    ok = showError('regEmailError', EMAIL.test(email.value.trim()) ? '' : '请输入有效的邮箱地址') && ok;
+    var strength = pass.value.length >= 10 && /\d/.test(pass.value) ? '' : '密码至少 8 位且包含数字';
+    ok = showError('regPasswordError', pass.value.length >= 8 ? strength : '密码至少 8 位') && ok;
+    ok = showError('regCodeError', /^\d{6}$/.test(code.value.trim()) ? '' : '请输入 6 位验证码') && ok;
+    if (!agree.checked) { if (window.zhishuToast) window.zhishuToast('请先同意服务条款'); ok = false; }
+    if (!ok) { shake(pass.value.length < 8 ? pass : (!EMAIL.test(email.value) ? email : name)); return; }
+    var goals = Array.prototype.slice.call(document.querySelectorAll('#goalGroup .chip[aria-pressed="true"]'))
+      .map(function (c) { return c.textContent.trim(); });
+    try { localStorage.setItem('zhishu:goals', JSON.stringify(goals)); } catch (err) {}
+    var btn = this.querySelector('button[type="submit"]');
+    btn.textContent = goals.length ? '正在为「' + goals[0] + '」排大纲…' : '正在创建…';
+    window.setTimeout(function () { enter(email.value.trim()); }, 700);
+  });
+})();
+</script>
+</body>
+</html>

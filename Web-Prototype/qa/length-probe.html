@@ -1,0 +1,49 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>几何交叉校验</title></head>
+<body>
+<!-- 校验 tools/build_line.py 的离散化/等弧长重采样与浏览器自己的测量是否一致。
+     两者若差得多，说明构建产物的路径几何不可信，必须先修构建工具。 -->
+<script src="../build/line-runtime-data.js"></script>
+<pre id="out">pending</pre>
+<script>
+(function () {
+  var RT = window.OIL_LINE_RUNTIME;
+  var NS = 'http://www.w3.org/2000/svg';
+  var svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', RT.path.viewBox);
+  var p = document.createElementNS(NS, 'path');
+  p.setAttribute('d', RT.path.d);
+  svg.appendChild(p);
+  document.body.appendChild(svg);
+
+  var browserLen = p.getTotalLength();
+  // 再用浏览器自己的采样，验等弧长重采样的均匀度
+  var N = RT.samples, gaps = [];
+  var prev = p.getPointAtLength(0);
+  for (var i = 1; i <= N; i++) {
+    var q = p.getPointAtLength(browserLen * i / N);
+    gaps.push(Math.hypot(q.x - prev.x, q.y - prev.y));
+    prev = q;
+  }
+  var mean = gaps.reduce(function (a, b) { return a + b; }, 0) / N;
+  var maxg = Math.max.apply(null, gaps), ming = Math.min.apply(null, gaps);
+
+  // 构建产物里第一个/最后一个采样点，与浏览器在同一弧长处取的点比对
+  var b0 = p.getPointAtLength(0), b1 = p.getPointAtLength(browserLen);
+  var r0 = RT.points[0], r1 = RT.points[N];
+  var endErr = Math.max(Math.hypot(b0.x - r0[0], b0.y - r0[1]),
+                        Math.hypot(b1.x - r1[0], b1.y - r1[1]));
+
+  document.getElementById('out').textContent = [
+    'build.length          ' + RT.length.toFixed(4),
+    'browser.getTotalLength ' + browserLen.toFixed(4),
+    '长度相对差            ' + (Math.abs(RT.length - browserLen) / browserLen * 100).toFixed(4) + '%',
+    '浏览器等弧长采样间距  均 ' + mean.toFixed(3) + '  最小 ' + ming.toFixed(3) + '  最大 ' + maxg.toFixed(3),
+    '产物 samples          ' + N,
+    '端点最大偏差          ' + endErr.toFixed(3) + ' 单位',
+    '结论                  ' + ((Math.abs(RT.length - browserLen) / browserLen < 0.002 && endErr < 1.0)
+                                  ? '一致（长度差 <0.2%，端点偏差 <1 单位）' : '不一致，构建工具需修')
+  ].join(String.fromCharCode(10));
+})();
+</script>
+</body></html>

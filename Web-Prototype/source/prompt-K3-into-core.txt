@@ -1,0 +1,13 @@
+Use the supplied reference image as the exact scene, composition, materials, palette, lighting direction and exposure reference. Keep everything about it unchanged: the same pale off-white bookshelf at the same position and scale, the same books with the same spines in the same order, the same plain near-white wall and floor, the same low plinth and the same dark slate faceted core floating above it in the lower right at the same size and place, the same soft even daylight from the upper left, the same high-key bright exposure.
+
+Change exactly ONE thing: the light arrives at the core and the core lights up.
+
+The ribbon of violet-white light has travelled all the way across and now meets the dark faceted core: the last short stretch of the ribbon touches its surface on the left side. In the same moment the core has woken up — its flat facets are lit from within with a soft violet-white light, the thin seam across its middle is a bright clean line, and a modest, contained glow sits just at its surface. The glow is restrained: it does not flood the room, does not light the wall or the floor, and does not spread more than a hand's width beyond the core.
+
+The ribbon has thinned as it arrives, so the bookshelf is now quiet and unlit, and the left part of the frame is calm and empty of light.
+
+The books and the bookshelf are completely unchanged in shape and position: no book opens, none slides out, none falls, no shelf moves. Camera unchanged, same framing, same distance. The floor and the wall stay plain and bright with no light pooling on the floor.
+
+Bright, airy, high-key. Matte illustration, soft volumetric shading, restrained detail.
+
+No text, no letters, no numbers, no readable characters, no watermark, no border, no UI. No neon, no cyberpunk, no circuitry, no wires, no holograms, no screens. No thick beams, no god-rays, no spotlight cones, no lens flare, no particles, no sparkles, no dust, no fog, no haze, no bloom. No brown, no dark wood, no sepia, no warm cast, no vignette, no darkening of the room. No extra books, no missing books, no second core, no second floating object, no hands, no people. No camera change, no reframing, no zoom.
