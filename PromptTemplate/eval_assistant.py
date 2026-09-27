@@ -38,6 +38,10 @@ RUNS_DIR = ROOT / "eval_runs"
 # 题目固定，只改学生答案 —— 判分必须有分辨力
 PROBLEM = "一个物体在空气中重 6 N，浸没在水中时弹簧测力计的示数为 4 N。求物体受到的浮力。"
 REFERENCE = "F浮 = G - F示 = 6 N - 4 N = 2 N，方向竖直向上。"
+# 本题满分必须由调用方传入。此前模板要求输出「得分 / 满分」却从不把满分传进来，
+# 分母是模型自己编的；而本评测的断言写的是 sc[0] == sc[1]（得分 == 自编满分），
+# 于是它永远在为「模型自己跟自己对得上」盖章，测量不到任何真东西。
+MAX_SCORE = 5
 
 CASES = {
     # 注意：学生答案必须真正与参考答案一致（含方向）——
@@ -99,14 +103,13 @@ def verdict_of(bodies: dict) -> str:
 
 
 def score_of(bodies: dict) -> tuple[float, float] | None:
-    """从【得分】里抽出 (得分, 满分)。"""
+    """从【得分】里抽出 (得分, 满分)。
+
+    只认「A/B」形式：模板已强制该形式，而旧的「N 分」回退会把 (N, N) 当成
+    (得分, 满分)，于是「得分==满分」这类断言可以靠一句「5 分」蒙过去。
+    """
     m = re.search(r"(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)", bodies.get("得分", ""))
-    if not m:
-        m2 = re.search(r"(\d+(?:\.\d+)?)\s*分", bodies.get("得分", ""))
-        if not m2:
-            return None
-        return float(m2.group(1)), float(m2.group(1))
-    return float(m.group(1)), float(m.group(2))
+    return (float(m.group(1)), float(m.group(2))) if m else None
 
 
 def validate(raw: str, case_name: str) -> list[tuple[str, bool, str]]:
@@ -131,15 +134,18 @@ def validate(raw: str, case_name: str) -> list[tuple[str, bool, str]]:
         want = " 或 ".join(spec["判定"])
         add(f"H1 判定∈{{{want}}}", v in spec["判定"], f"实际判定「{v}」")
 
-    # ---- H1 得分 ----
+    # ---- H1 得分：分母必须来自传入的满分，而不是模型自编的 ----
     sc = score_of(bodies)
+    if sc is not None:
+        add(f"H1 分母 = 传入满分 {MAX_SCORE}（不得自编）", sc[1] == MAX_SCORE,
+            f"实际 {sc}，分母应等于输入的本题满分")
     if spec["得分"] == "满分":
-        add("H1 得分=满分", sc is not None and sc[0] == sc[1], f"实际 {sc}")
+        add("H1 得分=满分", sc is not None and sc[0] == MAX_SCORE, f"实际 {sc}")
     elif spec["得分"] == "部分":
         add("H1 得分介于 0 与满分之间",
-            sc is not None and 0 < sc[0] < sc[1], f"实际 {sc}")
+            sc is not None and 0 < sc[0] < MAX_SCORE, f"实际 {sc}")
     elif spec["得分"] == "低":
-        add("H1 得分接近 0", sc is not None and sc[0] <= sc[1] * 0.3, f"实际 {sc}")
+        add("H1 得分接近 0", sc is not None and sc[0] <= MAX_SCORE * 0.3, f"实际 {sc}")
 
     # ---- H3 字段缺失时不得编造评分 ----
     if spec["须低置信"]:
@@ -181,7 +187,8 @@ def main() -> None:
 
     lib = PromptLib(ROOT)
     common = {"学科": "初中物理", "学生姓名": "小刚", "学生水平": "基础",
-              "薄弱点候选列表": "浮力计算、受力分析", "错题": PROBLEM, "参考答案": REFERENCE}
+              "薄弱点候选列表": "浮力计算、受力分析", "错题": PROBLEM,
+              "参考答案": REFERENCE, "本题满分": str(MAX_SCORE)}
 
     if args.self_check:
         for name, spec in CASES.items():

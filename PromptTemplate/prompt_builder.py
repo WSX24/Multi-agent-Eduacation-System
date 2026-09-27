@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml  # type: ignore[reportMissingModuleSource]  # PyYAML 无类型存根
@@ -29,6 +30,130 @@ _VAR_PATTERN = re.compile(r"\{\{([^{}]+)\}\}")
 
 # YAML 文件顶部的元数据键，不属于内容本体（加载 cot 片段时需过滤）
 _META_KEYS = {"name", "label", "version", "description"}
+
+
+# ────────────────────────── 输入契约 ──────────────────────────
+# 模板为「输出」写足了口径（课时计量口径 / 时限计量口径），却没有为「输入」
+# 声明类型与单位。后果是数值字段拿到自由文本时**不报错、静默降级**：
+#   星期可投入时间 = "每周三小时" → 乘法失效，模型自己猜一个数
+#   「上一章测验结果」= "还行"   → 数值分支（≥85% 升档）无法命中，却不告警
+# 因此把类型与单位写进模板的 inputs: 块，并让入口预检按它校验。
+#
+# 类型取值：
+#   text     仅查非空（默认，未声明时即为此类型）
+#   number   纯数字，无单位；可声 min/max（闭区间）与 min_exclusive/max_exclusive（开区间）
+#   quantity 数字 + 单位，形如 4周 / 4 周；也接受裸数字（单位已在模板中声明）；
+#            **必须为正数**，区间声明同上
+#   percent  形如「85%」或「<label> 85%」，取值默认限定 0~100，或命中 allow 里的哨兵值
+#   enum     必须命中 values 之一
+#
+# 闭/开区间的区分不能省：产品口径写的是「总周期**小于** 16 周」，若用 max: 16
+# 则 16 周本身也会放行——差一个边界的口径就不是同一个口径。
+_NUMBER_BODY = r"-?\d+(?:\.\d+)?"
+_BARE_NUMBER_RE = re.compile(rf"^{_NUMBER_BODY}$")
+_QUANTITY_RE = re.compile(rf"^({_NUMBER_BODY})\s*(.*)$")
+# 百分比只允许无符号数字，故不用 _NUMBER_BODY（它带可选负号）
+_PERCENT_RE = re.compile(r"^(\d+(?:\.\d+)?)%$")
+
+
+def _check_bounds(num: float, rule: dict, unit: str = "") -> str:
+    """闭区间与开区间一起查；返回问题描述，空串表示通过。"""
+    lo, hi = rule.get("min"), rule.get("max")
+    lo_x, hi_x = rule.get("min_exclusive"), rule.get("max_exclusive")
+    if lo is not None and num < lo:
+        return f"不得小于 {lo:g}{unit}，实际 {num:g}{unit}"
+    if hi is not None and num > hi:
+        return f"不得大于 {hi:g}{unit}，实际 {num:g}{unit}"
+    if lo_x is not None and num <= lo_x:
+        return f"必须大于 {lo_x:g}{unit}，实际 {num:g}{unit}"
+    if hi_x is not None and num >= hi_x:
+        return f"必须小于 {hi_x:g}{unit}，实际 {num:g}{unit}"
+    return ""
+
+
+def _check_quantity(value: str, rule: dict) -> str:
+    """返回问题描述，空串表示通过。"""
+    unit = str(rule.get("unit", ""))
+    m = _QUANTITY_RE.match(value)
+    if not m:
+        shown = f"4{unit}" if unit else "4"
+        return f"需要「数字+单位」，形如 {shown}，实际 {value!r}"
+    tail = m.group(2).strip()
+    if tail and unit and tail != unit:
+        return f"单位应为「{unit}」，实际 {value!r}"
+    num = float(m.group(1))
+    # 时长/数量类字段出现零或负数一定是调用方出错，不以 min 声明与否为转移
+    if num <= 0:
+        return f"必须为正数，实际 {value!r}"
+    return _check_bounds(num, rule, unit)
+
+
+def _check_percent(value: str, rule: dict) -> str:
+    """只认「85%」或「<label> 85%」两种形状，不做“含 % 就算数”的宽放。
+
+    旧实现用 search() 只要串里有百分号就放行，于是「下降了50%」「abc 99% def」
+    这类自由文本会穿过预检——而下游是拿它做数值分支的。
+    """
+    allowed = [str(a) for a in (rule.get("allow") or [])]
+    if value in allowed:
+        return ""
+    label = str(rule.get("label") or "")
+    body = value[len(label):].strip() if label and value.startswith(label) else value
+    m = _PERCENT_RE.match(body)
+    if not m:
+        shown = f"{label} 85%" if label else "85%"
+        hint = f"，或为 {allowed} 之一" if allowed else ""
+        return f"需要百分比，形如 {shown}{hint}，实际 {value!r}"
+    lo, hi = rule.get("min", 0), rule.get("max", 100)
+    num = float(m.group(1))
+    if not lo <= num <= hi:
+        return f"百分比需在 {lo:g}%~{hi:g}% 之间，实际 {value!r}"
+    return ""
+
+
+def _check_number(value: str, rule: dict) -> str:
+    if not _BARE_NUMBER_RE.match(value):
+        return f"需要纯数字，实际 {value!r}"
+    return _check_bounds(float(value), rule)
+
+
+def _check_enum(value: str, values: list) -> str:
+    # 必须 str 化：YAML 会把裸写的 true/false 解析成布尔 True/False，
+    # 而运行时变量表里它们是字符串 "true"/"false"。
+    allowed = [str(v) for v in values]
+    if not allowed or value in allowed:
+        return ""
+    return f"取值必须是 {' / '.join(allowed)} 之一，实际 {value!r}"
+
+
+@dataclass(frozen=True)
+class InputProblem:
+    """一处输入问题。``kind`` 为 ``missing``（缺项/空值）或 ``type``（类型/单位不符）。"""
+
+    name: str
+    kind: str
+    detail: str
+
+    def __str__(self) -> str:
+        return f"{self.name}：{self.detail}"
+
+
+def _check_one(name: str, value: str, rule: dict) -> InputProblem | None:
+    """按声明校验单个变量；返回 None 表示通过。"""
+    if not value:
+        return InputProblem(name, "missing", "缺失或为空")
+    kind = rule.get("type", "text")
+    if kind == "quantity":
+        detail = _check_quantity(value, rule)
+    elif kind == "percent":
+        detail = _check_percent(value, rule)
+    elif kind == "enum":
+        detail = _check_enum(value, rule.get("values") or [])
+    elif kind == "number":
+        detail = _check_number(value, rule)
+    else:
+        detail = ""
+    return InputProblem(name, "type", detail) if detail else None
 
 
 class PromptLib:
@@ -202,6 +327,32 @@ class PromptLib:
         variables = variables or {}
         text = self._render_template(self.templates[role])
         return {m.group(1) for m in _VAR_PATTERN.finditer(text)} - set(variables)
+
+    # ---------------- 输入契约 ----------------
+    def input_spec(self, role: str) -> dict:
+        """模板声明的输入契约（``inputs:`` 块）；未声明的变量视为 ``text``。"""
+        return self.templates[role].get("inputs") or {}
+
+    def check_inputs(self, role: str, variables: dict | None = None) -> list[InputProblem]:
+        """按输入契约校验变量表，返回**全部**问题（不抛异常，便于一次报全）。
+
+        与 ``missing_vars`` 的区别：后者只比对占位符有没有被替换，
+        本方法还会按 ``inputs:`` 声明的类型/单位/取值域做实质校验。
+        调用方若不传某变量，其类型规则不生效，只会被记为 missing。
+        """
+        variables = variables or {}
+        spec = self.input_spec(role)
+        problems: list[InputProblem] = []
+        for name in sorted(self.missing_vars(role, {})):
+            raw = variables.get(name, "")
+            problem = _check_one(name, str(raw).strip(), spec.get(name) or {})
+            if problem:
+                problems.append(problem)
+        return problems
+
+    def invalid_inputs(self, role: str, variables: dict | None = None) -> list[InputProblem]:
+        """只返回类型/单位/取值域不符的问题（缺项由 ``blank_inputs`` 负责）。"""
+        return [p for p in self.check_inputs(role, variables) if p.kind == "type"]
 
 
 if __name__ == "__main__":

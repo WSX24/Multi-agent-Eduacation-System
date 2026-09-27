@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────
+# 根级 .gitignore
+#
+# 本仓库是**公开**的。此文件的第一职责是保证密钥永远不会被提交：
+# 之前 LangChain开发/ 下同时存在真实 .env 与 LangSmith-APIKEY(一年).txt，
+# 而根目录没有 .gitignore、PromptTemplate/.gitignore 又管不到那个目录——
+# 一次 `git add -A` 就会把密钥推到公开仓库。
+#
+# 注意：.gitignore 挡不住 `git add -f`。真正的兜底是 pre-commit 钩子
+# 或 CI 上的密钥扫描；这里只解决“无意提交”。
+# ─────────────────────────────────────────────────────────────
+
+# ── 密钥与凭据：绝不可提交 ──────────────────────────────────
+.env
+.env.*
+*.env
+!.env.example
+
+# 文件名里就带“这是密钥”的
+*APIKEY*
+*api_key*
+*apikey*
+*api-key*
+*secret*
+*credential*
+*密钥*
+
+# 私钥 / 证书
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ── Python 产物 ────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# 本地构建/索引产物（如 LangChain开发/_rag_index）
+_rag_index/
+
+# ── 编辑器 / 系统 ──────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

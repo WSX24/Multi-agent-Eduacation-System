@@ -7,7 +7,36 @@
 #    调用：lib.build("teacher_unit", {...}, fewshot=False)
 name: teacher_unit
 label: 教师Agent·单元渲染者
-version: "1.0"
+version: "1.1"
+# 修订 v1.1：新增 inputs 契约（含「上一章测验结果」的百分比形状与范围）；可选值补「中等」。
+
+# 输入契约：「上一章测验结果」直接驱动数值分支（≥85% 升档 / <60% 降档），
+# 必须是百分比或声明的哨兵值；传「还行」会静默走降级分支，不告警。
+inputs:
+  学生水平:
+    type: enum
+    values: [入门, 基础, 中等, 进阶, 竞赛]
+  need_example:
+    type: enum
+    values: ["true", "false"]   # 必须加引号，否则 YAML 解析成布尔值
+  是否安排复习:
+    type: enum
+    values: ["true", "false"]
+  本单元课时:
+    type: quantity
+    unit: 课时
+    min: 0.5
+    max: 3         # 与 teacher_planner「课时计量口径」第 1 条一致
+  本单元序号:
+    type: number
+    min: 1
+  本章单元总数:
+    type: number
+    min: 1
+  上一章测验结果:
+    type: percent
+    label: 正确率      # 只认「正确率 85%」或「85%」两种形状，不放开自由文本
+    allow: [无（首章）, 无数据]      # 无前置章节 / 有章节但未考，两种缺数据态
 
 sections:
   - title: 角色设定
@@ -34,7 +63,7 @@ sections:
 
   - title: 对话对象
     body: |
-      学生，当前水平为{{学生水平}}档。可选值：入门 / 基础 / 进阶 / 竞赛。
+      学生，当前水平为{{学生水平}}档。可选值：入门 / 基础 / 中等 / 进阶 / 竞赛。
 
   - title: 本次任务上下文
     body: |
