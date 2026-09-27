@@ -1,0 +1,125 @@
+# 教师 Agent（规划者）Few-shot
+# 风格锚定：先给学生视图，再给系统蓝图；蓝图内所有 lesson_status 一律 pending。
+#
+# ⚠️ 本示例故意选用初中生物，而非本项目最常见的初中数学——
+#    示例是「格式参照」，不是「答案模板」。若示例与常见请求同题，
+#    模型会直接照搬其章节与单元名（实测同题时照抄率 100%）。
+name: teacher_planner
+label: 教师Agent·学习方案规划 Few-shot
+examples:
+  - input: |
+      学科：初中生物
+      学习目标：理解光合作用的原料、条件与产物，能写出反应式并解释影响因素
+      总周期：5 周，每周可投入 3 课时
+      学生水平：中等
+    output: |
+      【学习总览】5 周后你能说清光合作用需要什么、产生什么，会写光合作用的反应式，并能用影响因素解释农业增产的做法。
+      【阶段地图】第1章 光合作用的原料、条件与产物（2个单元 + 1次测验）→ 第2章 光合作用的过程与反应式（2个单元 + 1次测验）→ 第3章 光合作用的影响因素与应用（2个单元 + 1次测验）
+      【时间安排】第1章：第1-2周，约4课时；第2章：第2-3周，约4.5课时；第3章：第4-5周，约4课时。全周期预留约2.5课时弹性，用于章节测验讲评和错题回炉。
+      【解锁规则】每章学完并通过章节测验（60分以上），下一章才会开启；没过就先补本章的作业和错题，不往下赶。
+      【给你的话】中等档的关键在第2章的反应式——把「二氧化碳 + 水 →（光、叶绿体）有机物 + 氧气」和实验现象对应起来，第3章的应用就是它的直接推论。
+
+      course:
+        subject: 初中生物
+        goal: 理解光合作用的原料、条件与产物，能写出反应式并解释影响因素
+        student_level: 中等
+        total_weeks: 5
+        weekly_hours: 3
+        mode: long_term
+        buffer_ratio: 0.15
+        net_hour_budget: 12.5
+
+      chapters:
+        - id: ch01
+          order: 1
+          title: 光合作用的原料、条件与产物
+          estimated_hours: 4
+          unlock:
+            type: none
+          units:
+            - id: ch01-u1
+              title: 探究光合作用需要光
+              type: 新授
+              estimated_hours: 2
+              homework:
+                count: 4
+                difficulty: 基础
+              lesson_status: pending
+            - id: ch01-u2
+              title: 原料与产物的检验实验
+              type: 新授
+              estimated_hours: 2
+              homework:
+                count: 4
+                difficulty: 基础
+              lesson_status: pending
+          assessment:
+            type: chapter_test
+            difficulty: 基础
+            covers: [ch01-u1, ch01-u2]
+            unlock_next:
+              min_score: 60
+
+        - id: ch02
+          order: 2
+          title: 光合作用的过程与反应式
+          estimated_hours: 4.5
+          unlock:
+            type: after_chapter
+            chapter: ch01
+            min_score: 60
+          units:
+            - id: ch02-u1
+              title: 光合作用的物质与能量转化
+              type: 新授
+              estimated_hours: 2.5
+              homework:
+                count: 4
+                difficulty: 基础
+              lesson_status: pending
+            - id: ch02-u2
+              title: 反应式的书写与含义
+              type: 新授
+              estimated_hours: 2
+              homework:
+                count: 3
+                difficulty: 基础
+              lesson_status: pending
+          assessment:
+            type: chapter_test
+            difficulty: 基础
+            covers: [ch02-u1, ch02-u2]
+            unlock_next:
+              min_score: 60
+
+        - id: ch03
+          order: 3
+          title: 光合作用的影响因素与应用
+          estimated_hours: 4
+          unlock:
+            type: after_chapter
+            chapter: ch02
+            min_score: 60
+          units:
+            - id: ch03-u1
+              title: 光照强度与二氧化碳浓度的影响
+              type: 新授
+              estimated_hours: 2
+              homework:
+                count: 4
+                difficulty: 基础
+              lesson_status: pending
+            - id: ch03-u2
+              title: 农业生产中的应用
+              type: 新授
+              estimated_hours: 2
+              homework:
+                count: 3
+                difficulty: 基础
+              lesson_status: pending
+          assessment:
+            type: chapter_test
+            difficulty: 基础
+            covers: [ch03-u1, ch03-u2]
+            unlock_next:
+              min_score: 60
