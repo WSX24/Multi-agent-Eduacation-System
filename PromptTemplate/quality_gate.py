@@ -13,8 +13,11 @@
 1. ``copy_hits`` —— **照抄检测**。算法化（最长公共子串），不靠人工维护关键词表。
    之前用手写 token 列表做判据，既不通用又制造过误判（把「单元名」当成抄袭信号）。
 2. ``QualityGate`` —— 通用「生成 → 校验 → 回投重试」闸门。
-3. ``blank_inputs`` / ``require_inputs`` —— **入口预检**。调用前的确定性拒绝，
-   不让「输入缺失」这种调用方错误进入模型（模型会编造内容填补空白）。
+3. ``blank_inputs`` / ``invalid_inputs`` / ``require_inputs`` —— **入口预检**。
+   调用前的确定性拒绝，不让两类调用方错误进入模型：
+   （a）**输入缺失**——模型会编造内容填补空白；
+   （b）**输入类型/单位不符**——如把「每周三小时」传给要吃数字的字段，
+   模型会自己猜一个数，而且前后不一致。
 
 用法::
 
@@ -146,26 +149,45 @@ def blank_inputs(lib, role: str, variables: dict) -> list[str]:
     这类问题靠提示词兜不住（模板里已写明「任一项缺失不得猜测、直接标低置信度」，
     模型照样无视）。字段缺失属于调用方的错误，应当在调用前就拒绝。
 
+    只负责「缺不缺」；数值字段的单位/取值域是否合规由 ``invalid_inputs`` 负责。
+
     用法::
 
         blanks = blank_inputs(lib, "assistant", variables)
         if blanks:
             raise ValueError(f"缺少必要输入：{blanks}")
     """
-    needed = lib.missing_vars(role, {})       # 模板里出现的全部占位符
-    return sorted(k for k in needed if not str(variables.get(k, "")).strip())
+    return sorted(p.name for p in lib.check_inputs(role, variables) if p.kind == "missing")
+
+
+def invalid_inputs(lib, role: str, variables: dict):
+    """**入口预检（类型层）**：格式不合契约的变量，返回 ``InputProblem`` 列表。
+
+    与 ``blank_inputs`` 互补。缺项是「没给」，本函数管的是「给了但不对」——
+    模板为输出写足了口径，输入却没有类型与单位时，数值字段会静默降级：
+
+        {{总周期}} × {{每周可投入时间}}   传「每周三小时」→ 乘法失效
+        正确率 ≥ 85% → 升档               传「还行」→ 分支不命中，不告警
+
+    两种失败都不报错，只是结果悄悄变差，因此必须在调用前拦住。
+    """
+    return lib.invalid_inputs(role, variables)
 
 
 def require_inputs(lib, role: str, variables: dict) -> dict:
-    """入口预检的强制版：缺项立即抛 ``ValueError``，否则原样返回 ``variables``。
+    """入口预检的强制版：缺项或格式不符立即抛 ``ValueError``，否则原样返回变量表。
 
-    供链路代码一行接入（``require_inputs(lib, role, v)``），保证「缺输入」
+    供链路代码一行接入（``require_inputs(lib, role, v)``），保证「输入不可用」
     在**所有**模板调用点都是同一个确定性行为，而不是各调用方各写一遍。
+    错误信息一次报全（缺项 + 类型问题），不让学生看到二次试错。
     """
-    blanks = blank_inputs(lib, role, variables)
-    if blanks:
-        raise ValueError(f"缺少必要输入（{role}）：{blanks}")
-    return variables
+    problems = lib.check_inputs(role, variables)
+    if not problems:
+        return variables
+    lines = [f"    ・{p}" for p in problems]
+    raise ValueError(
+        f"输入不合契约（{role}），已阻断调用：\n" + "\n".join(lines)
+    )
 
 
 @dataclass
