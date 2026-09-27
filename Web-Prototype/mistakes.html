@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>错题库 · 智塾</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body data-page="mistakes" data-crumb="个人中心 / 错题库">
+
+<div class="app" id="app" data-nav="closed">
+  <aside class="sidebar"></aside>
+  <div class="main">
+    <header class="topbar"></header>
+
+    <main class="page">
+
+      <div class="page-head">
+        <div>
+          <span class="eyebrow">PROFILE / 个人中心</span>
+          <h1 class="page-title" style="margin-top:8px">错题库</h1>
+          <p class="lead">助教 Agent 归纳的错题全在这里。选一道，点「一键解答」让答疑 Agent 直接从错因讲到同类题。</p>
+        </div>
+        <div class="row">
+          <a class="btn btn-primary" href="generate.html">单独对话答疑 Agent</a>
+        </div>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <a class="tab" href="report.html" aria-selected="false" role="tab">学情分析报告</a>
+        <a class="tab" href="mistakes.html" aria-selected="true" role="tab">错题库</a>
+        <a class="tab" href="learning.html" role="tab">学习记录</a>
+      </div>
+
+      <section style="margin-top:24px" data-od-id="mistake-bank">
+        <div class="section-head">
+          <div>
+            <h2 style="font-size:var(--text-xl)">共 <span data-result-count="#mistakeList">8</span> · 按掌握度排序</h2>
+            <p>点一行查看详情；「未掌握」的题会一直留在题库里，直到同类题做对。</p>
+          </div>
+          <div class="row row--wrap" data-chip-group data-filter-target="#mistakeList">
+            <button class="chip" type="button" data-selected>全部</button>
+            <button class="chip" type="button" data-filter-value="weak">未掌握</button>
+            <button class="chip" type="button" data-filter-value="review">待复习</button>
+            <button class="chip" type="button" data-filter-value="done">已掌握</button>
+          </div>
+        </div>
+
+        <div class="split">
+          <!-- 题目列表 -->
+          <div class="panel" style="overflow:hidden">
+            <div class="panel-head">
+              <span class="panel-title">错题列表</span>
+              <span class="caption">来自助教 Agent 的批改</span>
+            </div>
+            <div id="mistakeList"></div>
+            <div class="panel-body" data-empty-state hidden>
+              <span class="body-muted">这个分类下暂时没有错题。</span>
+            </div>
+          </div>
+
+          <!-- 解答面板 -->
+          <div class="answer-panel">
+            <div class="panel">
+              <div class="panel-head">
+                <span class="panel-title" id="aSubject">数据结构 · 循环队列判满</span>
+                <span class="badge badge--danger" id="aLevel">未掌握 · 错 2 次</span>
+              </div>
+              <div class="panel-body">
+                <p class="body-sm body-muted" id="aQuestion">题目加载中…</p>
+
+                <div class="panel" style="margin-top:16px;background:var(--bg)">
+                  <div class="panel-body">
+                    <span class="caption">助教 Agent 判定的错因</span>
+                    <p class="body-sm" style="margin-top:8px" id="aCause">—</p>
+                  </div>
+                </div>
+
+                <div class="row row--between" style="margin-top:16px">
+                  <span class="caption">答疑 Agent</span>
+                  <button class="btn btn-primary btn-sm" type="button" id="solveBtn">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+                    一键解答
+                  </button>
+                </div>
+                <div class="answer-body" id="aBody" style="margin-top:12px">
+                  <p class="body-sm body-muted">点「一键解答」，它会先指出你错在哪一步，再给完整解法，最后附 3 道同类型题。</p>
+                </div>
+
+                <div id="aSameWrap" hidden style="margin-top:20px">
+                  <span class="caption">答疑 Agent 生成的同类型题</span>
+                  <div class="plan-card" style="margin-top:8px"><ol id="aSame"></ol></div>
+                  <button class="btn btn-sm" type="button" id="moreSame" style="margin-top:12px">再生成 3 道</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 单独对话答疑 Agent -->
+            <div class="panel" style="margin-top:16px">
+              <div class="panel-head">
+                <span class="panel-title"><span class="dot dot--live dot--pulse" style="display:inline-block;margin-right:8px"></span>单独对话答疑 Agent</span>
+                <span class="caption">上下文已带入当前错题</span>
+              </div>
+              <div class="panel-body">
+                <div class="msg-text" id="qaLog" aria-live="polite" style="display:flex;flex-direction:column;gap:10px">
+                  <p class="body-sm body-muted">问我这道题的任意一步，或者让我换一种讲法。</p>
+                </div>
+                <div class="composer-box" style="margin-top:14px;background:var(--surface)">
+                  <textarea id="qaInput" rows="1" data-autogrow placeholder="追问，例如：为什么用 size 字段判满更安全？" aria-label="追问答疑 Agent"></textarea>
+                  <button class="btn btn-primary btn-sm" type="button" id="qaSend">发送</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script src="js/shell.js" defer></script>
+<script src="js/app.js" defer></script>
+<script src="js/mistakes.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+# ═══════════════════════════════════════════════════════════════════════
+# Motion Brief — 智塾 landing.html 首屏「一本书的光」滚动一镜到底
+#
+# 事实源 #2。只保存「由 Concept Contract 派生的关键帧、片段和生产计划」。
+# 合同字段（driver / time_control / background_owner / aspect_ratio /
+# continuity / destination）不在此复制，一律回到
+# source/concept-contract.yaml。
+#
+# 世界材料与判据 = source/scene-bible.md
+# 运行时实际段落与时间 = build/timeline.json（由编译结果生成，不手工抄写）
+# 交付格式与控制器 = build/motion-budget.json
+# ═══════════════════════════════════════════════════════════════════════
+
+concept_contract: source/concept-contract.yaml
+scene_bible: source/scene-bible.md
+
+# ── 生成服务 ───────────────────────────────────────────────────────────
+provider: magic-hour
+# 用户 2026-09-26 改用 Magic Hour AI（magichour.ai/developer）。
+# 工具是 tools/magichour_job.py（upload / image / edit / video / status），
+# 不是技能自带的 video_job.py（那个打 ZenMux），也不是 tools/agnes_job.py。
+# 凭据经 credential-ui 的 run 入口注入；槽位名 oil-motion/zenmux/default 与
+# 变量名 ZENMUX_API_KEY 是历史遗留的程序兼容名，**实际服务是 Magic Hour**。
+
+# ── 参数空间与访问 ─────────────────────────────────────────────────────
+parameter_space: linear
+# 一条有起止的时间轴：光从书升起 → 飘向核心 → 汇入点亮。0→1，不是闭环。
+
+media_access: random
+# scrub 要求运行时能 seek 到任意帧位置。编译产出为**全关键帧**（-g 1），
+# 见 build/media/compile.json 的 allFramesAreKeyframes = true。
+
+# ── 手势策略 ───────────────────────────────────────────────────────────
+gesture_policy:
+  unit: continuous
+  inertia: preserve
+  # 触摸板惯性滚动应该继续推动画面 —— 这正是「我在推时间轴」的手感。
+  while_active: retarget
+  # 滚动中改向立即改向。往回滚就是往回放，片的运动本身可逆。
+  boundary: clamp
+  programmatic_navigation: ignore
+  # 首屏的 data-scroll-to 锚点导航与 resize 校正不得被当成用户滚动。
+
+# ── 叙事阶段（细节见 source/scene-bible.md §4）────────────────────────
+storyboard:
+  - 待机：书页上有极淡的微光，核心暗而安静
+  - 升起：柔和的淡紫白光雾从摊开的书上升起
+  - 飘移：光雾缓慢向右朝核心移动，保持弥散、体积不膨胀
+  - 汇入：光收成一道较细的光带，从核心左侧流进去
+  - 点亮：核心切面从内部亮起，中缝成为一条明亮细线，光晕紧贴表面
+
+# ── 关键帧 ─────────────────────────────────────────────────────────────
+# keyframe_policy: produced-frames-only（本版与前三版都不同，理由如下）
+#
+# 前三版用「图片模型生成 K0，其余取视频尾帧」。本版连 K0 也来自生成服务，
+# 而且中间帧**不是设计出来的，是生产出来的**：
+#
+#   K0     = source/K0-book.png            图片生成（flux-schnell / 640px）
+#   K-mid  = qa/seg-01-book-tail.png       seg-01 验收后的**实际尾帧**
+#   K-end  = source/K3-core-lit.png        **图片编辑器**在原图上只改光得到
+#
+# 为什么废弃「独立文生图生成中间关键帧」：实测四张这样生成的「关键帧」之间
+# 结构相关只有 0.047–0.066（等于无关）—— 模型每次都重画整个场景，
+# 它们不是一条链，只能当概念稿。见 qa/prototype-line.md 与
+# qa/shelf-route-status.md。
+#
+# 为什么 K-end 用编辑器而不是文生图：编辑器是在原图上改，文生图会重画。
+
+keyframes:
+  - id: K0
+    state: 开场（书 + 暗核心）
+    frame_source: generated
+    asset: source/K0-book.png
+    size: 640x368
+    note: 免费档图片上限 640px；已验收（均亮 234 / 亮纸 92.6% / 过曝 0%）
+  - id: K-mid
+    state: 光已升起并开始向右飘
+    frame_source: derived            # = seg-01 的实际尾帧
+    asset: qa/seg-01-book-tail.png
+    size: 844x486
+  - id: K-end
+    state: 光已汇入核心、核心亮起、画面干净无光团
+    frame_source: edited             # 图片编辑器在原图上只改光
+    asset: source/K3-core-lit.png
+    size: 640x368
+    note: >-
+      实测：紫色从 9.24% 降到 2.42%、紫色重心从 56.7% 回到 74.7%（核心在 ~85%）、
+      核心区内紫色从 5.42% 升到 21.47%。紫云消失且核心点亮。
+
+clip_chain:
+  - id: seg-01-book-light
+    from: K0
+    to: K-mid
+    change: 一个主要变化 —— 光从书上升起并开始向右飘。
+    anchors: 首帧 K0 + 尾帧 K-mid
+    model: ltx-2.3
+    resolution: 480p
+    seconds: 5
+    output: source/seg-01-book-light.mp4
+  - id: seg-02-converge-v2
+    from: K-mid
+    to: K-end
+    change: 一个主要变化 —— 光收束成带、流入核心、核心点亮。
+    anchors: 首帧 K-mid + 尾帧 K-end
+    model: ltx-2.3
+    resolution: 480p
+    seconds: 4
+    output: source/seg-02-converge-v2.mp4
+    note: >-
+      第一版（seg-02-converge.mp4）只给了首帧，结果光反向漂走并堆成紫云；
+      这一版补上尾帧后修正。两版对比见 qa/shelf-route-status.md 附三。
+
+master: source/master-minimal-bright-720p.mp4
+# 用户 2026-09-26 指定的新母版（原文件「极简明亮风格视频制作需求_1_.mp4」）。
+# 1280×720（精确 16:9）/ 24fps / 241 帧 / 10.04s / 带音轨（编译时 -an 去除）。
+# 上一版 source/oneshot-book-light-v2.mp4（844×486）保留，可随时换回。
+# 两者的画面指标差一个量级（均亮 156 vs 230），**不是同一个世界**；
+# 语义描述待用户确认，见 source/concept-contract.yaml 顶部的声明。
+
+# ── 静止与锚点 ─────────────────────────────────────────────────────────
+rest_state: "K0：书页微光、核心暗着。滚动位置 0 时的画面，可长时间停留。"
+loop: none
+anchor: center
+# 本片没有需要逐帧维持的构图锚点：书固定在左下部、核心固定在右后方，
+# 由提示词的「保持原位、保持形状」约束，并由 verify_scene 的亮度分布间接看住。
+# 这与第一版的「中轴 x=0.5」不同 —— 那个锚点是为程序绘制的一笔画设的。
+
+scene_continuity: >-
+  见 source/scene-bible.md。跨段必须锁定：素色台面的明度与色温、书的位置与形状、
+  多面体的位置与大小、光的色相（#a855f7 家族的偏白端）、紫色面积 ≤8%。
+  因为两段都是首尾帧双锚点接力的，接缝按构造成立；实测成片输出接缝
+  平均差 2.5、差>40 的像素 0.00%。
+
+# ── 帧准备 ─────────────────────────────────────────────────────────────
+frame_policy: native
+# 源就是 24fps，与目标一致，无需插帧。编译命令里显式传 --frame-policy native
+# --fps 24，见 qa/integration.md 与 build/media/compile.json。
+
+target_fps: 24
+
+quality_target: >-
+  母版 1280×720。编译产出全关键帧（-g 1）：桌面 CRF 22（5.56 MB）、
+  移动 CRF 24（4.60 MB）。与母版的逐帧平均差 1.18–1.73（<3，可视为无损）。
+  编码目标 1280×720 @ DPR1（build/motion-budget.json，sourceCheck 通过）。
+  **页面按用户要求满幅覆盖**，视口更宽时由浏览器放大：
+  1440 → 1.12×、1920 → 1.50×、2560 → 2.00×。倍数记录在合同的「已知偏差」。
+  体量偏大（5.56 MB）：这片画面细节密度高，全关键帧的代价。
+  需要更小可以提 CRF 或用短 GOP（代价是反向 seek 变慢），下一步再定。
+
+aspect_ratio: "16:9"
+pixel_dimensions: 1280x720
+
+reduced_motion: >-
+  prefers-reduced-motion: reduce 或视口 <=980px 时，不初始化媒体：
+  显示 poster.png（第 0 帧）+ 最终文案状态，不播放、不连续 scrub。
+
+# ── 生产顺序与验收 ─────────────────────────────────────────────────────
+production_notes:
+  - 生成服务与档位：Magic Hour AI。免费档实测上限 —— 视频模型只有 ltx-2.3、
+    分辨率只有 480p；图片只有 640px；kling-3.0 / 720p / 1k 均返回
+    402 plan_upgrade_required。见 qa/shelf-route-status.md 附二。
+  - **每一段都必须给首帧 + 尾帧双锚点**。这是本片最重要的一条经验：
+    只给首帧时模型对终点没有约束，实测光会反向漂走并堆成 9.26% 的紫云；
+    给了尾帧后守在核心一侧、面积 ≤3.46%。见 qa/shelf-route-status.md 附三。
+  - 提示词要**短**，且不要写「一道道细如发丝的光」。小模型吃不下长提示词，
+    也守不住细密结构。完整可粘贴的版本在 final/HANDOFF-prompts-zh.md。
+  - 中间帧不能靠独立文生图（实测结构相关 0.05）。只能用视频的实际尾帧，
+    或用图片编辑器在原图上改。
+  - 编译命令（可复现）：
+      python <oil-motion>/scripts/compile_scroll_video.py source/oneshot-book-light-v2.mp4 build/media \
+        --background-owner video --budget-report build/motion-budget.json \
+        --frame-policy native --fps 24 --timeline-output build/timeline.json \
+        --desktop-width 844 --mobile-width 844 \
+        --desktop-crf 20 --mobile-crf 22 \
+        --initial-state-id K0 --poster-source-frame 0
+  - 预算命令（可复现）：
+      python <oil-motion>/scripts/motion_budget.py --frames 218 \
+        --display 844x475 --dpr 1 --source 844x486 --driver scroll \
+        --time-control scrub --parameter-space linear --background-owner video \
+        --scroll-pages 3 --report build/motion-budget.json --strict
+  - 验收命令（世界档位必须显式传，默认的 paper 档会误杀）：
+      python tools/verify_scene.py build/media/final/motion-baked-desktop.mp4 \
+        --fps 1 --no-axis --profile book-light
+  - **交付前必须处理**：视频水印（免费档自带）与分辨率（844×486）。
+    两者都要付费档；官方支持订阅后**不重新生成**直接去水印。
+    见 source/scene-bible.md §6 与合同末尾的「已知偏差」。

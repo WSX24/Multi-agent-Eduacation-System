@@ -1,0 +1,15 @@
+{
+  "provider": "magic-hour",
+  "kind": "image-to-video",
+  "project_id": "cmui1zcui00lhjb01drbefc1v",
+  "model": "ltx-2.3",
+  "resolution": "480p",
+  "end_seconds": 4.0,
+  "mode": "first+last",
+  "credits_charged": 96,
+  "fps": 24,
+  "assets": {
+    "image_file_path": "api-assets/cmui16dnb001ykh01rqtjnjux/aabd8cba-f021-406a-b05e-7c1a75a65aa7-image-0.png",
+    "end_image_file_path": "api-assets/cmui16dnb001ykh01rqtjnjux/0c84ada6-b258-4978-93c3-6f31519fbd3f-image-0.png"
+  }
+}

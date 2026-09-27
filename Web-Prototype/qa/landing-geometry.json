@@ -1,0 +1,33 @@
+{
+  "why": "取消悬停待机（2026-09-25）之后的几何验收证据。这一条只由布局决定，看屏幕像素只能估，所以在页面里直接读 rect。",
+  "how": "qa/layout-probe.html（零依赖：iframe 加载 ../landing.html，读 getBoundingClientRect，把数字写进 <pre>，用 chrome --headless --dump-dom 读出；同一份代码另存为顶层页面副本复核过，两者一致）。",
+  "viewport": {
+    "iframe_1600x900": { "innerWidth": 1600, "innerHeight": 900 },
+    "toplevel_window_1600x900": { "innerWidth": 1582, "innerHeight": 804 }
+  },
+  "rest_state": {
+    "anchorA": { "top": 553.5, "bottom": 832.5, "width": 279.0, "height": 279.0 },
+    "anchorB": { "top": 499.5, "bottom": 832.5, "width": 333.0, "height": 333.0 },
+    "filmFloor": { "top": 831.5, "bottom": 832.5, "height": 1.0 },
+    "robotRig": { "top": 582.2, "bottom": 861.2, "width": 279.0, "height": 279.0 },
+    "rigTransform": "translate3d(871px, 582.18px, 0px) scale(1, 1) rotate(0deg)"
+  },
+  "verdict": {
+    "feet_on_floor_at_rest": "通过 —— anchorA 的底边 832.5 与 #filmFloor 的底边 832.5 逐像素相同（差 0.0px）。",
+    "feet_on_floor_at_landing": "通过 —— anchorB 的底边 832.5 与 anchorA 一致，起点与落点同在地平线上，不再有 125px 落差。",
+    "no_rest_rotation": "通过 —— rotate(0deg)。此前静止项为 −5°（悬停姿态的身体倾角），已归零。",
+    "box_extends_below_floor": "预期 —— .rig 盒子底边在 861.2，比地平线低 28.7px，因为素材里脚底在画布 0.899，脚下那 10.1% 是纯白余量，不可见。",
+    "why_the_125px": "曾经的 .anchor--a { margin-bottom: var(--stage-lift) } = clamp(72px,14vh,138px)（900px 视口下 126px）把待机位置整体抬到书架旁半空。删掉它即删掉悬停。"
+  },
+  "media_runtime": {
+    "timeline": "build/timeline.json 载入成功（schemaVersion 1，1 段）",
+    "video": "build/media/final/motion-baked.mp4 与 build/media/final/poster.png 就位",
+    "htmlDataFilm": "media",
+    "note": "无头 Chrome 加 --disable-gpu 时视频解码失败会走 film:failed 分支 → take.done → p=1；这解释了截图里为什么是「已落定」状态。真实浏览器不受影响。"
+  },
+  "mobile": {
+    "viewport": "390x844（<=980px 分支）",
+    "behavior": "film-runtime.js 不初始化媒体，#filmCta 静态可见，机器人排在标题与书架之间（.rig 静态定位）",
+    "screenshot": "qa/landing-mobile-390x844.png"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "endpoint": "/images/generations",
+  "model": "agnes-image-2.5-flash",
+  "size": "1024x768",
+  "output": "source\\K2-rays-converge-4x3.png",
+  "reference_images": [
+    "source/K0-shelf-graded.png"
+  ],
+  "usage": null,
+  "created": 1790404559
+}

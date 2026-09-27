@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>overflow-check</title>
+<style>body{margin:0;font:12px/1.6 monospace}#out{white-space:pre;padding:12px}iframe{border:0;position:absolute;left:-9999px;top:0}</style>
+</head>
+<body>
+<pre id="out">pending</pre>
+<iframe id="A" src="../landing.html" width="1440" height="900"></iframe>
+<iframe id="B" src="../landing.html" width="1024" height="900"></iframe>
+<iframe id="C" src="../landing.html" width="390" height="844"></iframe>
+<iframe id="D" src="../landing.html" width="320" height="800"></iframe>
+<iframe id="E" src="../index.html" width="390" height="844"></iframe>
+<script>
+var out = [], pending = 5;
+['A','B','C','D','E'].forEach(function (id) {
+  var f = document.getElementById(id);
+  f.onload = function () {
+    var doc = f.contentDocument;
+    doc.fonts.ready.then(function () {
+      setTimeout(function () {
+        var de = doc.documentElement;
+        out.push('--- ' + f.getAttribute('src').replace('../','') + ' @ ' + f.width + 'px ---');
+        out.push('  documentElement.scrollWidth ' + de.scrollWidth + '  clientWidth ' + de.clientWidth +
+                 (de.scrollWidth > de.clientWidth + 1 ? '   ← 横向溢出!' : '   ok'));
+        // 找出任何比视口宽的元素
+        var bad = [];
+        Array.prototype.forEach.call(doc.querySelectorAll('body *'), function (el) {
+          /* 最外层 <svg> 是一个裁剪视口：带 preserveAspectRatio="…slice" 时，
+             viewBox 里的东西本来就会超出 svg 的框（那正是「裁两边」的实现方式），
+             几何上越界但永远不会造成页面滚动。这类元素要跳过，否则全是假阳性。 */
+          if (el.closest && el.closest('svg')) return;
+          var r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > f.width + 1 || r.left < -1)) {
+            bad.push(el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : '') +
+                     '  [' + Math.round(r.left) + ' → ' + Math.round(r.right) + ']  «' + (el.textContent || '').trim().slice(0, 24) + '»');
+          }
+        });
+        out.push(bad.length ? '  溢出元素:\n    ' + bad.slice(0, 12).join('\n    ') : '  没有元素超出视口');
+        // 逐 h2 检查是否溢出自己的容器
+        Array.prototype.forEach.call(doc.querySelectorAll('.land-section h2, .land-cta h2, .idx-hero h1'), function (h) {
+          out.push('  h2 clientW ' + h.clientWidth + '  scrollW ' + h.scrollWidth + (h.scrollWidth > h.clientWidth + 1 ? '  ← 文本溢出!' : '  ok') + '  «' + h.textContent.slice(0, 12) + '…»');
+        });
+        out.push('');
+        if (--pending === 0) document.getElementById('out').textContent = out.join('\n');
+      }, 400);
+    });
+  };
+});
+</script>
+</body></html>
