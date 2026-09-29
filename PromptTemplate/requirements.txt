@@ -1,3 +1,9 @@
 # Prompt 模板库依赖
 # 安装：pip install -r requirements.txt
+#
+# PyYAML   核心加载器（prompt_builder / quality_gate）必需
+# openai   仅评测脚本（eval_*.py）需要，且都是函数内延迟导入，
+#          因此不装也能跑 --self-check 和 demo_course_flow.py；
+#          但跑真实评测（-n）会缺。实测版本 3.13.0。
 PyYAML>=6.0
+openai>=1.0
