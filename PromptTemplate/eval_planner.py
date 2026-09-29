@@ -27,11 +27,19 @@ import os
 import re
 import sys
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
 
 from prompt_builder import PromptLib
+from quality_gate import copy_check_yaml
+
+
+@lru_cache(maxsize=1)
+def _lib() -> PromptLib:
+    """模板库单例：validate() 会被反复调用，不该每次都重新读一遍 YAML。"""
+    return PromptLib(ROOT)
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -41,10 +49,20 @@ RUNS_DIR = ROOT / "eval_runs"
 # 评测用例
 # ⚠️ bio 与 Few-shot 示例同题，是「照抄」的回归用例；
 #    math / physics 与示例不同学科，测模型是否真在规划。
+# ⚠️ chinese 是**文科回归用例**：原版三个用例全是理科（生物/数学/物理），
+#    文科路径从未被验证过。文科的最小课时粒度、单元命名习惯与理科不同
+#    （单元更少、课时更长、且不存在“公式/实验”类单元），用来查规划是否只适用于理科。
 CASES = {
     "bio": {
         "学科": "初中生物",
         "学习目标": "理解光合作用的原料、条件与产物，能写出反应式并解释影响因素",
+        "总周期": "5周",
+        "每周可投入时间": "3课时",
+        "学生水平": "中等",
+    },
+    "chinese": {
+        "学科": "初中语文",
+        "学习目标": "掌握记叙文阅读中的环境描写作用分析，能独立写出有具体依据的赏析",
         "总周期": "5周",
         "每周可投入时间": "3课时",
         "学生水平": "中等",
@@ -96,15 +114,6 @@ def split_blueprint(raw: str) -> tuple[str, str]:
     blueprint = re.sub(r"^```[a-zA-Z]*\s*", "", blueprint.strip())
     blueprint = re.sub(r"```\s*$", "", blueprint.strip())
     return view, blueprint
-
-
-def _fewshot_unit_titles() -> set[str]:
-    """Few-shot 示例里出现过的单元标题，用于检测模型是否照抄。"""
-    doc = yaml.safe_load((ROOT / "fewshots" / "teacher_planner.yaml").read_text(encoding="utf-8"))
-    out = doc["examples"][0]["output"]
-    bp = out[out.index("course:"):]
-    data = yaml.safe_load(bp)
-    return {u["title"] for c in data["chapters"] for u in c["units"]}
 
 
 def validate(raw: str, *, check_copy: bool = True) -> list[tuple[str, bool, str]]:
@@ -239,14 +248,12 @@ def validate(raw: str, *, check_copy: bool = True) -> list[tuple[str, bool, str]
     add("每单元作业 3~5 题", not bad_hw, f"越界 {bad_hw}")
 
     # ---- 照抄检测：单元标题与 Few-shot 的重合度 ----
+    # 实现已抽到 quality_gate.copy_check_yaml——通用 copy_check 对 YAML 会 100% 误报
+    # （字段名与枚举值同样是任何合规蓝图都必带的 schema）。此处只取结果，
+    # 检查项名称与历史基线保持一致。
     if check_copy:
-        ref_titles = _fewshot_unit_titles()
-        gen_titles = [u["title"] for c in chapters for u in c.get("units", [])]
-        dup = [t for t in gen_titles if t in ref_titles]
-        ratio_copy = len(dup) / len(gen_titles) if gen_titles else 0
-        add("非照抄 Few-shot（重合<50%）", ratio_copy < 0.5,
-            f"{len(dup)}/{len(gen_titles)} 个单元标题与示例相同"
-            + (f"：{dup[:3]}" if dup else ""))
+        _, copy_ok, copy_detail = copy_check_yaml(raw, "teacher_planner", _lib())
+        add("非照抄 Few-shot（重合<50%）", copy_ok, copy_detail)
 
     return checks
 
