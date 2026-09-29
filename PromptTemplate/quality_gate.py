@@ -127,6 +127,71 @@ def load_fewshot_refs(lib, name: str) -> list[str]:
     return [ex.get("output", "") for ex in data.get("examples", []) if ex.get("output")]
 
 
+# ────────────────── YAML 蓝图专用的照抄检测 ──────────────────
+# 为什么通用 copy_hits 不能用在 YAML 蓝图上（实测踩过）：
+#   蓝图的字段名与枚举值（estimated_hours / homework_count / difficulty 基础 /
+#   lesson_status pending …）是**任何合规蓝图都必带的 schema**。归一化去掉标点后，
+#   整段 schema 会串成一个 150+ 字的「公共子串」，于是闸门 100% 误报、
+#   回投重做也永远修不好——**过严的闸门比没有闸门更糟**。
+# 正确做法：只比对**业务字段**（章标题 / 单元标题），schema 不参与。
+#   库自己的规划评测器（eval_planner.py）一直是这么做的，本函数把它抽出来共享，
+#   避免下游用户再踩一次，也避免两处各写一份而逐渐偏离。
+
+BLUEPRINT_FIELDS = ("units",)          # 默认只比单元标题；传 ("chapters", "units") 连章标题一起比
+
+
+def blueprint_titles(raw: str, fields: tuple[str, ...] = BLUEPRINT_FIELDS) -> list[str]:
+    """从 M1 输出里取出可比对的业务字段（章/单元标题）。
+
+    解析失败（蓝图缺失或非法）返回空表，由调用方决定是否另行报错——
+    本函数只负责抽字段，不承担结构校验。
+    """
+    marker = raw.find("course:")
+    if marker < 0:
+        return []
+    try:
+        data = yaml.safe_load(raw[marker:])
+    except yaml.YAMLError:
+        return []
+    if not isinstance(data, dict):
+        return []
+    titles: list[str] = []
+    if "chapters" in fields:
+        titles += [c["title"] for c in data.get("chapters", []) if c.get("title")]
+    if "units" in fields:
+        for c in data.get("chapters", []):
+            titles += [u["title"] for u in c.get("units", []) if u.get("title")]
+    return titles
+
+
+def copy_check_yaml(raw: str, name: str, lib, *,
+                    fields: tuple[str, ...] = BLUEPRINT_FIELDS,
+                    min_ratio: float = 0.5):
+    """**YAML 蓝图版**照抄检测：只比业务字段的重合率，与 ``copy_check`` 同形状。
+
+    判定口径：生成蓝图里的章节/单元标题，落在 Few-shot 示例同名集合里的比例
+    必须 ``< min_ratio``（默认 50%）。同题撞车时这个比例会跑到 100%。
+
+    返回 ``(检查项名, 是否通过, 说明)``，可直接塞进 ``QualityGate.generate(checks=...)``。
+    """
+    refs = load_fewshot_refs(lib, name)
+    ref_titles: set[str] = set()
+    for r in refs:
+        ref_titles.update(blueprint_titles(r, fields))
+
+    gen = blueprint_titles(raw, fields)
+    name_of = "章/单元标题" if len(fields) > 1 else "单元标题"
+    if not gen:
+        return (f"非照抄 Few-shot({name})", False,
+                f"未能从输出中取出{name_of}（蓝图缺失或不可解析）")
+
+    dup = [t for t in gen if t in ref_titles]
+    ratio = len(dup) / len(gen)
+    detail = (f"{len(dup)}/{len(gen)} 个{name_of}与示例相同"
+              + (f"：{dup[:3]}" if dup else ""))
+    return (f"非照抄 Few-shot({name})", ratio < min_ratio, detail)
+
+
 def copy_check(raw: str, name: str, lib, min_common: int = DEFAULT_MIN_COMMON):
     """生成一条可塞进校验器的检查项：是否照抄了指定 Few-shot。"""
     refs = load_fewshot_refs(lib, name)

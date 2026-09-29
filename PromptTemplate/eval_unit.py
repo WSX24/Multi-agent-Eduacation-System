@@ -66,6 +66,22 @@ BAND_KEYWORDS = {
     "nodata": ["数据不足", "未做调整", "无数据", "按蓝图"],
 }
 
+# 五个用例提到模块级：replay_eval.py 要用同一份定义回放历史录制。
+# 原先它内联在 main() 里，导致「用例定义」无法被复用——回放只能靠复制粘贴，
+# 而复制粘贴出来的用例一旦与真评测漂移，回放就在验另一套东西。
+CASES = {
+    "low": {"name": "low", "band": "low", "rate": 0.45,
+            "weak": ["探究光合作用需要光"], "need_example": True},
+    "mid": {"name": "mid", "band": "mid", "rate": 0.72,
+            "weak": [], "need_example": True},
+    "high": {"name": "high", "band": "high", "rate": 0.92,
+             "weak": [], "need_example": True},
+    "nodata": {"name": "nodata", "band": "nodata", "rate": None,
+               "weak": [], "need_example": True},
+    "noex": {"name": "noex", "band": "low", "rate": 0.45,
+             "weak": ["探究光合作用需要光"], "need_example": False},
+}
+
 
 # ------------------------------------------------------------------ 用例
 def _load_course() -> dict:
@@ -193,18 +209,8 @@ def main() -> None:
     chapter = course["chapters"][1]          # ch02，其 unlock 依赖 ch01
     unit_idx = 0
 
-    raw_cases = [
-        # (用例名, 判定档位, 正确率, 薄弱点, 是否出例题)
-        ("low", "low", 0.45, ["探究光合作用需要光"], True),
-        ("mid", "mid", 0.72, [], True),
-        ("high", "high", 0.92, [], True),
-        ("nodata", "nodata", None, [], True),
-        ("noex", "low", 0.45, ["探究光合作用需要光"], False),
-    ]
-    cases = [
-        {"name": n, "band": band, "rate": r, "weak": w, "need_example": ne}
-        for n, band, r, w, ne in raw_cases
-    ]
+    # 用例定义已提到模块级（CASES），回放脚本复用同一份
+    cases = list(CASES.values())
 
     if args.self_check:
         for c in cases:

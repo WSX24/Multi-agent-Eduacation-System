@@ -176,6 +176,10 @@ class PromptLib:
 
     @staticmethod
     def _load_yaml(path: Path) -> dict:
+        # 文件不存在时返回空表，而不是抛 FileNotFoundError：
+        # 允许“最小模板目录”（只建 templates/ 就能用，不必连 cot/ 也建上）。
+        if not path.exists():
+            return {}
         return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
     # ---------------- 构建 ----------------

@@ -16,27 +16,42 @@ PromptTemplate/
 ├── eval_planner.py           # 规划模板真实模型评测器（18 项断言 + 重试闸门）
 ├── eval_unit.py              # 单元渲染模板评测器（含学情差分测试）
 ├── eval_sprint.py            # 短周期速成模板评测器（含时限压力测试）
+├── eval_teacher.py           # 讲授模板评测器（五档分支差分）
+├── eval_assistant.py         # 助教批改评测器（判分分辨力 / 满分来源）
+├── eval_qa.py                # 答疑评测器（核心断言：引导不喂答案）
+├── eval_generic.py           # 通用结构校验 + 输出契约（运行时也用它）
+├── eval_essay.py             # 作文/主观题批改评测器（分维度评分 + 判分分辨力）
+├── eval_fewshot_variants.py  # Few-shot 变体对照实验
+├── eval_skeleton_rollout.py  # 骨架示例 vs 完整实例对照实验
 ├── probe_same_topic.py       # 同题撞车探针（检测「换数字抄袭」）
 ├── eval_ablation.py          # Few-shot 消融实验
-├── eval_runs/                # 评测原始输出存档（生成的产物）
+├── replay_eval.py            # L2 回放校验：拿 eval_runs/ 的录制重跑断言（不调 API）
+├── eval_baseline.txt         # L2 守门清单（当前合格录制快照，配合 --expect 用）
+├── eval_runs/                # 评测原始输出存档（生成的产物，被 gitignore）
+├── experiments/              # 消融/变体实验用的 Few-shot 素材
 ├── test_prompt_builder.py    # 冒烟测试（可 pytest 也可直接运行）
+├── test_replay_eval.py       # L2 回放的测试（专防「静默少验」）
+├── _archive/
+│   └── system_base.yaml      # 已归档：通用骨架 + 设计四原则（旧 system 结构样本）
 ├── templates/                # 角色模板本体（每角色一个 YAML）
-│   ├── system_base.yaml      # 通用骨架 + 设计四原则（旧 system 结构示例）
 │   ├── teacher.yaml          # 教师 Agent · 讲授者（单次讲解，带水平分支）
 │   ├── teacher_planner.yaml  # 教师 Agent · 学习方案规划者（长周期大纲 + 门控）
 │   ├── teacher_unit.yaml     # 教师 Agent · 单元渲染者（按需生成单个单元）
 │   ├── teacher_sprint.yaml   # 教师 Agent · 短周期速成（一次性交付）
-│   ├── assistant.yaml        # 助教 Agent · 批改者
+│   ├── assistant.yaml        # 助教 Agent · 批改者（客观题：对/错 + 得分/满分）
+│   ├── assistant_essay.yaml  # 助教 Agent · 作文/主观题批改者（分维度评分 + 等级）
 │   ├── supervisor.yaml       # 督学 Agent · 督促者
 │   └── qa.yaml               # 答疑 Agent · 解答者（扩展）
 ├── fewshots/                 # Few-shot 示例（与模板分离，按需拼接）
-│   ├── teacher.yaml
+│   ├── teacher.yaml          # 含数学 2 例 + 语文 1 例（文科风格锚定）
 │   ├── teacher_planner.yaml
 │   ├── teacher_sprint.yaml
 │   ├── assistant.yaml
+│   ├── assistant_essay.yaml  # 作文批改范文（逐条引原文、不代写全文）
+│   ├── qa.yaml               # 含数学 1 例 + 语文 1 例；锁「思路引导不给结论」
 │   └── supervisor.yaml
 └── cot/
-    └── snippets.yaml         # 可复用 CoT 指令片段
+    └── snippets.yaml         # 可复用 CoT 指令片段（理科 3 + 文科 4，共 7 个）
 ```
 
 ## 快速开始
@@ -89,8 +104,52 @@ python eval_ablation.py -n 3                       # Few-shot 消融实验
 python eval_teacher.py -n 1                        # 真实模型评测：讲授者四档分支
 python eval_assistant.py --self-check                # 离线检查助教用例
 python eval_assistant.py -n 2                        # 真实模型评测：助教判分
+python eval_essay.py --self-check                 # 离线检查作文批改用例与校验器
+python eval_essay.py -n 2                         # 真实模型评测：作文批改（含判分分辨力）
+python eval_qa.py --self-check                    # 离线检查答疑范文与校验器
+python eval_qa.py -n 2                            # 真实模型评测：答疑（引导不喂答案）
 python quality_gate.py                             # 照抄检测器自测
 ```
+
+## 三层验证（L1 / L2 / L3）
+
+每层能证明的东西不一样，**不能互相替代**：
+
+| 层 | 命令 | 验什么 | 要 API Key | 确定性 |
+|---|---|---|---|---|
+| L1 组装 | `eval_*.py --self-check` | prompt 拼装、占位符注入、用例预检 | 不要 | 确定 |
+| L2 判定 | `replay_eval.py` | **校验器**对已知输出的判定 | 不要 | 确定 |
+| L3 行为 | `eval_*.py -n` | 模型在新模板下是否真照做 | 要 | 不确定（可靠 retry 兜底） |
+
+### L2 回放：为什么需要它
+
+10 个 `eval_*.py` 把「拿到模型输出」与「校验输出」焊在同一个进程里：没有 Key 就
+`sys.exit(2)`，根本走不到断言。于是校验器自身的错误只能靠真跑 + 人眼发现——而本项目
+已经出过 5 次，**全部是误报**（qa 三条污染词表/关键词误报、essay 一条范文自引用误报、
+照抄检测通用版对 YAML 蓝图 100% 误报）。
+
+`replay_eval.py` 把 `eval_runs/` 里存下的真实输出当“录像”，直接喂给现成校验器：
+
+```bash
+python replay_eval.py             # 探索：全部录制跑一遍，看失败分布与系统性信号
+python replay_eval.py -r qa -v    # 只看答疑，打印全部失败项
+python replay_eval.py --selftest  # 注入已知缺陷，验证它抓得住（也会演示抓不住什么）
+
+# 守门模式：清单内任何一份红了就以退出码 1 结束
+python replay_eval.py --write-baseline eval_baseline.txt
+python replay_eval.py --expect eval_baseline.txt --strict
+```
+
+**它抓什么、抓不到什么**（先看这条，否则会拿到假安全感）：
+
+- 抓得到：校验器变**严**造成的误报。这正是本项目历史 5 次校验器缺陷的全部形态。
+- 抓不到：校验器变**松**造成的漏检——那需要另备「已知坏样本」语料。
+- 两种都抓不到：模型行为退化。那是 L3 的地盘，回放永远替代不了真跑。
+
+> ⚠️ `eval_runs/` 在 `.gitignore` 里，所以 L2 只能在**留过录制的那台机器上**跑。
+> 换一台机器，清单里的文件名就不存在——此时守门模式**直接报错退出（退码 2）**，
+> 而不是把“一份都没跑”当成“全部通过”。要让 L2 进 CI，必须先解决语料入库
+> （见 `EVAL-REPORT.md` 第四节缺口 #2）。
 
 ## 真实模型评测
 
@@ -115,6 +174,7 @@ python quality_gate.py                             # 照抄检测器自测
 | `math` | 初中数学 | 主路径 |
 | `physics` | 初中物理 | 跨学科泛化 |
 | `bio` | 初中生物 | **与 Few-shot 同题，照抄回归用例** |
+| `chinese` | 初中语文 | **文科回归用例**（原版三个用例全为理科，文科路径从未被验证） |
 
 ### 实测发现（v1.0 → v1.1）
 
@@ -327,6 +387,26 @@ A 与 B 测量打平，定夺标准不是数字而是**保证的性质**，故�
 **该实验已完成，结论见上节「✅ 已解决：同题撞车 → 改用「骨架示例」」**——
 A/B 测量打平，选 B 的理由不是数字而是保证的性质（结构性免疫 > 概率性）。
 
+### 照抄检测的两个版本：自然语言输出 vs YAML 蓝图
+
+同题撞车的检测分两种，**不能混用**：
+
+| 函数 | 用途 | 比什么 |
+|------|------|--------|
+| `copy_check(raw, name, lib)` | 自然语言输出（批改 / 督学 / 讲解） | 剔除格式外壳后全文字的 15 字 n-gram 重合 |
+| `copy_check_yaml(raw, name, lib)` | **YAML 蓝图（M1 规划）** | 只比业务字段（章/单元标题）的重合率 < 50% |
+
+为什么必须分开——实测踩过的坑：
+
+> 用通用 `copy_check` 检测 M1 输出，闸门报「与示例逐字重合 17 处，最长 **158 字**」，
+> 且回投重做后**还是 17 处**。根因是蓝图的字段名与枚举值
+> （`estimated_hours` / `homework_count` / `difficulty 基础` / `lesson_status pending` …）
+> 是**任何合规蓝图都必带的 schema**，归一化去掉标点后整段 schema 串成一个公共子串。
+> 换成不同学科的合规蓝图后，通用版**仍然误报**，而 `copy_check_yaml` 报 `0/10 个单元标题与示例相同`（正确）。
+
+两个函数的返回值同形状 `(检查项名, 是否通过, 说明)`，都可直接塞进
+`QualityGate.generate(checks=...)`。`eval_planner.py` 已改用共享实现（避免两处各写一份而逐渐偏离）。
+
 ## 助教 Agent（assistant）真实评测
 
 `eval_assistant.py` 与其它评测器不同：它的重点不是「格式对不对」，而是**判分对不对**。
@@ -456,10 +536,25 @@ lib.build(role, variables=None, fewshot=True, cot=None, fewshot_count=None) -> s
 
 | 参数 | 说明 |
 |------|------|
-| `role` | 模板名：`teacher` / `teacher_planner` / `teacher_unit` / `teacher_sprint` / `assistant` / `supervisor` / `qa` / `system_base` |
+| `role` | 模板名：`teacher` / `teacher_planner` / `teacher_unit` / `teacher_sprint` / `assistant` / `assistant_essay` / `supervisor` / `qa` |
 | `variables` | 变量字典，填充 `{{占位符}}`（未提供的变量会原样保留，便于自查） |
 | `fewshot` | `False` 不加示例；`True` 自动用同名 fewshot；传字符串指定其它 fewshot（如 `"teacher"`） |
-| `cot` | CoT 片段名：`zero_shot` / `math_steps` / `self_check`；`None` 不加 |
+| `cot` | CoT 片段名（见下表）；`None` 不加 |
+
+### 可用的 CoT 片段
+
+原版 3 个片段里有 2 个是数学专用（`math_steps` 自带「数学符号规范」、`self_check` 要求
+「代入检验/特殊值检验」），**文科调 `cot=` 实际只有通用一个选项**。现补 4 个文科片段：
+
+| 片段 | 适用 | 核心步骤 |
+|------|------|---------|
+| `zero_shot` | 通用 | 一步步想，写出关键推理 |
+| `math_steps` | 数学/物理/化学 | 审题 → 选方法 → 计算 → 检验 → 结论（含纯文本符号规范） |
+| `self_check` | 理科 | 代入检验 / 特殊值检验 |
+| `text_reading` | 语文/英语阅读、文言文 | 定位 → 圈限定词 → 语境推断 → 依据回填 → 取舍 |
+| `source_analysis` | 历史/政治/地理材料题 | 读设问 → 材料分层 → 提取信息 → 联系背景 → 分点作答 |
+| `essay_outline` | 作文/论述题 | 审题 → 定立意 → 列提纲 → 配素材 → 写首尾 |
+| `self_check_humanities` | 文科 | 回文检查 / 回问检查 / 落地检查 / 体例检查 |
 | `fewshot_count` | 最多拼接几个示例 |
 
 辅助方法：`list_roles()` / `list_fewshots()` / `list_cot()` / `missing_vars(role, variables)`。
@@ -512,6 +607,26 @@ units:
 python demo_course_flow.py    # 无需 API Key：用 Few-shot 示例当作 LLM 回复跑通全链路
 ```
 
+`progress`（学生进度）的结构，以及三个学情字段各自的来源：
+
+```python
+progress = {
+    "ch01": {
+        "rate": 0.72,                        # 章节测验正确率 → 上一章测验结果（主依据）
+        "weak": ["单位书写"],                 # 错题归因 → 前置薄弱点
+        "units_done": ["ch01-u1", "ch01-u2"], # 已完成单元 → 学情数据（完成度）
+        "practice": {                         # 可选：近期练习数据，优先用作学情数据
+            "days": 7, "count": 45, "rate": 0.62,
+        },
+    },
+}
+```
+
+> 三个字段**不能同源**。早先「上一章测验结果」与「学情数据」都取 `rate`，
+> 拼出来的句子是「读取正确率 72%与ch01 章节测验正确率 72%」——病句，
+> 而且会让模型以为手里有两份独立证据。现在模板也写明了
+> “辅助数据里若出现练习正确率，**不得**拿它代替主依据去查表”。
+
 ### 调用示例
 
 ```python
@@ -551,9 +666,15 @@ sprint = lib.build("teacher_sprint", {
 | `{{学生答案}}` | 学生作答 | … | assistant |
 | `{{参考答案}}` | 标准答案 | … | assistant |
 | `{{本题满分}}` | 本题分值——【得分】分母的唯一来源，禁止模型自编 | 5 | assistant |
+| `{{题目}}` | 作文/主观题的题目与要求 | 以「慢下来」为题写一篇文章 | assistant_essay |
+| `{{学生作文}}` | 学生本次作文或主观题作答原文 | … | assistant_essay |
+| `{{评分维度}}` | 分维度与各自满分——【维度得分】各维分母的唯一来源 | 立意与思想 10、结构与条理 10 | assistant_essay |
+| `{{总分}}` | 作文总分——【总分】分母的唯一来源 | 40 | assistant_essay |
+| `{{字数要求}}` | 题目要求的字数（不评字数时传「无」） | 不少于 600 字 | assistant_essay |
 | `{{学习数据}}` | 行为数据摘要 | 本周做题 45 道，正确率 62% | supervisor |
 | `{{薄弱点}}` / `{{薄弱点候选列表}}` | 薄弱知识点列表 | 因式分解、二次函数 | assistant |
 | `{{待复习知识点}}` | 待复习内容 | 整式乘法 | supervisor |
+| `{{学生提问}}` | 学生本次的提问原文——答疑的唯一问题来源 | 为什么 (-2)×(-3)=6？ | qa |
 | `{{知识点链}}` | 本题涉及的知识点链 | 因式分解 → 求根 | qa |
 
 ### 教师 Agent 专属占位符
@@ -568,7 +689,8 @@ sprint = lib.build("teacher_sprint", {
 | `{{当前章节}}` | 当前所处章节 | 第1章 一元二次方程的解法 | unit |
 | `{{本单元名称}}` / `{{本单元序号}}` / `{{本章单元总数}}` | 单元定位 | 公式法 / 2 / 3 | unit |
 | `{{本单元课时}}` | 本单元计划课时 | 2 | unit |
-| `{{上一章测验结果}}` | 上一章测验得分/正确率 | 正确率 62% | unit |
+| `{{上一章测验结果}}` | 上一章**章节测验**正确率——难度分档的**主依据**（inputs 契约里是 percent，含「无数据 / 无（首章）」哨兵值） | 正确率 62% | unit |
+| `{{学情数据}}` | **辅助**学情：近期练习数据或单元完成度。与上一条**刻意不同源**，不重复注入同一个数字 | 近 7 天练习 45 题，正确率 62% | unit |
 | `{{前置薄弱点}}` | 前置知识的薄弱项 | 配方法 | unit |
 | `{{是否安排复习}}` | 本单元是否含复习衔接 | true / false | unit |
 | `{{need_example}}` | 是否输出例题 | true / false | teacher / unit |
@@ -601,7 +723,15 @@ sections:
     dont: [禁止事项]
 ```
 
-**旧式 `system`（兼容保留）**——字段固定为 `role / goal / abilities / restrictions / audience / tone / output_format`，超出的字段会被忽略。仅 `system_base.yaml` 仍在使用。
+**旧式 `system`（兼容保留）**——字段固定为 `role / goal / abilities / restrictions / audience / tone / output_format`，超出的字段会被忽略。
+
+> 状态（2026-09-28）：模板库中**已无角色使用旧式结构**（`qa` / `supervisor` 已改写为 `sections`；
+> 原本唯一还在用的 `system_base.yaml` 是不被任何代码引用的死文件，已归档到 `_archive/`）。
+> 但 **loader 对旧结构的兼容并未取消**，样本保留在 `_archive/system_base.yaml`，
+> 并有测试 `test_legacy_system_format_still_supported` 保着这条路径。
+
+> 历史：`qa` 与 `supervisor` 原本也是旧式结构，装不下「输出纪律」这类自定义小节
+> （多写的字段会被**静默丢弃**）。v1.2 已重写为 `sections`，逐字保留了原七个字段的内容。
 
 ## 如何新增一个角色
 
@@ -617,7 +747,7 @@ sections:
 
 | 原文档规划 | 落地文件 |
 |-----------|---------|
-| `system_prompt_base.md` | `templates/system_base.yaml` |
+| `system_prompt_base.md` | `_archive/system_base.yaml`（已归档：改为 sections 写法后它不再被引用） |
 | `role_teacher.md` | `templates/teacher.yaml` + `fewshots/teacher.yaml` |
 | `role_assistant.md` | `templates/assistant.yaml` + `fewshots/assistant.yaml` |
 | `role_supervisor.md` | `templates/supervisor.yaml` + `fewshots/supervisor.yaml` |

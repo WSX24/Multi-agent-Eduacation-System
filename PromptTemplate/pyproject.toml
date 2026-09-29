@@ -6,9 +6,37 @@ build-backend = "setuptools.build_meta"
 name = "prompttemplate"
 version = "0.1.0"
 description = "教学多智能体 Prompt 模板库（角色扮演 + Few-shot + CoT）"
+# openai 不被打包进来的任何模块导入（eval_*.py 都是函数内延迟导入，
+# 且它们本身不作为 py-modules 安装），但它是一切真实评测的硬依赖。
+# 之所以仍放进 dependencies 而不是 optional-dependencies：README 与
+# 使用指南给的唯一安装命令是 `pip install -e .`，没有 extras 这一步——
+# 若降级为可选依赖，换机器跑评测就会以「装完了却缺 openai」的形式失败，
+# 正是 2026-09-27 WORKLOG 记下的那个缺口。宁可多装一个纯 Python 小包。
 requires-python = ">=3.8"
-dependencies = ["PyYAML>=6.0"]
+dependencies = [
+    "PyYAML>=6.0",
+    "openai>=1.0",
+]
 
-# prompt_builder.py 是单文件模块，必须用 py-modules 声明才能被打包
+# 单文件模块，必须用 py-modules 声明才能被打包。
+#
+# 除核心加载器外，下面三个是**运行时也要用**的契约工具，因此一并纳入包：
+#   quality_gate     入口预检（require_inputs/blank_inputs）+ 照抄检测 + 重试闸门
+#   demo_course_flow  门控参考实现（parse_blueprint/can_unlock/unit_variables）
+#   eval_generic      输出模块契约（ASSISTANT_SECTIONS / split_by_names）
+# 前两个名字很明确；eval_generic 里装的其实是「解析模型输出的契约定义」，
+# 名字带 eval_ 有点误导，改名会波及评测器，先保持现状。
+#
+# 为什么必须进包而不是靠 sys.path：Pylance 解析 editable 安装靠读
+# site-packages/__editable__*_finder.py 里的 MAPPING 表，表里没有的模块
+# 编辑器一律报 reportMissingImports，与代码能否运行无关。
+#
+# 其余 eval_*.py / probe_*.py 是评测入口脚本，按 README 在库目录下直接跑，
+# 不作为模块安装（避免往全局命名空间塞 eval_planner 这类通用名）。
 [tool.setuptools]
-py-modules = ["prompt_builder"]
+py-modules = [
+    "prompt_builder",
+    "quality_gate",
+    "demo_course_flow",
+    "eval_generic",
+]
