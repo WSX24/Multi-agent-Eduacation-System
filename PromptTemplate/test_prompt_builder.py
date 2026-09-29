@@ -11,6 +11,7 @@ import yaml
 
 from demo_course_flow import (build_planner_prompt, build_unit_prompt, can_unlock,
                               parse_blueprint, unit_variables)
+from eval_generic import ESSAY_SECTIONS, validate_essay, validate_qa
 from eval_unit import split_sections, validate as validate_unit
 from eval_sprint import count_duration_hours, split_sections as split_sprint_sections, validate as validate_sprint
 from prompt_builder import PromptLib
@@ -50,7 +51,32 @@ def test_custom_sections_are_rendered():
     """回归测试：sections 结构下的自定义小节（如条件分支指令）不得被静默丢弃。"""
     prompt = lib.build("teacher", {}, fewshot=False)
     assert "【条件分支指令】" in prompt
-    assert "IF {{学生水平}} == \"入门\"" in prompt
+    assert "入门档：讲解降低难度" in prompt
+    assert "竞赛档：增加跨知识点综合分析" in prompt
+
+
+def test_no_literal_equality_branches():
+    """条件分支不得写成 `IF {{变量}} == 值`。
+
+    那种写法填入变量后会变成字面量自比（`IF true == false`、`IF 基础 == "入门"`）：
+    模型收到一个无意义的比较式，还白发 token。改为“值陈述 + 命中条件”的自然语言。
+    """
+    for role in lib.list_roles():
+        prompt = lib.build(role, {})
+        hits = re.findall(r"IF\s+\{\{[^}]*\}\}", prompt)
+        assert not hits, f"{role} 仍有字面量比较式分支：{hits[:2]}"
+
+
+def test_branch_values_still_reach_the_model():
+    """消解分支不得把开关变量也一起消掉——值必须仍然进到 Prompt 里。"""
+    off = lib.build("teacher", {"学科": "初中数学", "知识点": "因式分解",
+                                 "学生水平": "入门", "need_example": "false"}, fewshot=False)
+    assert "本次是否需要例题：false" in off
+    assert "本次学生水平：入门档" in off
+    on = lib.build("teacher", {"学科": "初中数学", "知识点": "因式分解",
+                                "学生水平": "竞赛", "need_example": "true"}, fewshot=False)
+    assert "本次是否需要例题：true" in on
+    assert "本次学生水平：竞赛档" in on
 
 
 def test_new_teacher_modes_build():
@@ -689,15 +715,17 @@ def test_unit_hours_range_matches_planner_measurement_rule():
 def test_every_student_level_has_a_branch_in_teacher():
     """契约声明的取值域必须与模板分支一一对应。
 
-    这正是本次修掉的缺陷：「中等」在取值域里合法、在分支里不存在，
+    这正是早先修掉的缺陷：「中等」在取值域里合法、在分支里不存在，
     传入后不命中任何分支且不报错。这条测试防止二者再次漂移。
+    分支形式在 2026-09-28 由 `IF {{学生水平}} == "x"` 改为
+    “值陈述 + 按档位列举”（`入门档：……`）——后者填入变量后不会变成字面量自比。
     """
     spec = lib.input_spec("teacher")["学生水平"]["values"]
     prompt = lib.build("teacher", {}, fewshot=False)
     for level in spec:
-        assert f'{{{{学生水平}}}} == "{level}"' in prompt, f"「{level}」缺少对应分支"
-    branches = re.findall(r'\{\{学生水平\}\} == "([^"]+)"', prompt)
-    assert sorted(branches) == sorted(spec), f"分支 {branches} 与契约 {spec} 不一致"
+        assert f"{level}档：" in prompt, f"「{level}」缺少对应档位"
+    branches = re.findall(r"^([^\s：]+)档：", prompt, re.M)
+    assert sorted(branches) == sorted(spec), f"档位 {branches} 与契约 {spec} 不一致"
 
 
 # ---------------------------------------------------------- 生产代码闸门
@@ -837,6 +865,240 @@ def test_quality_gate_reports_failure_without_raising():
     assert not result.passed, "不合规输出不得判为通过"
     assert result.attempts == 2, "max_retry=1 应共尝试 2 次"
     assert result.failures, "应能列出未通过项"
+
+
+def test_humanities_cot_snippets_exist_and_concat():
+    """文科 CoT：原版 3 个片段里 2 个是数学专用，文科无可用的分步指令。
+
+    新增 4 个后，必须保证：名字出现在 list_cot 里，且能真的拼进 Prompt。
+    """
+    for name in ("text_reading", "source_analysis", "essay_outline", "self_check_humanities"):
+        assert name in lib.list_cot(), f"缺文科 CoT 片段 {name}"
+        prompt = lib.build("qa", {}, cot=name)
+        assert lib.cot[name].strip().splitlines()[0][:12] in prompt, f"{name} 未拼进 Prompt"
+
+
+def test_humanities_cot_has_no_math_requirements():
+    """文科 CoT 不得要求「代入检验/特殊值检验」这类数学动作，否则文科用不了。"""
+    for name in ("text_reading", "source_analysis", "essay_outline", "self_check_humanities"):
+        body = lib.cot[name]
+        for word in ("代入检验", "特殊值", "LaTeX", "乘号", "幂写"):
+            assert word not in body, f"{name} 混入了理科专用要求：{word}"
+
+
+def test_math_cot_still_intact():
+    """回归：新增文科片段不得改动原有数学片段。"""
+    assert "【数学符号规范】" in lib.cot["math_steps"]
+    assert "第 1 步【审题】" in lib.cot["math_steps"]
+    assert "代入检验" in lib.cot["self_check"]
+
+
+def test_essay_role_builds_and_validates():
+    """作文/主观题批改：新角色的变量能填满、预检能通过。"""
+    v = {"学科": "初中语文", "学生姓名": "小林", "学生水平": "中等",
+         "题目": "以「慢下来」为题写一篇议论文", "学生作文": "（正文）",
+         "字数要求": "不少于 600 字",
+         "评分维度": "立意与思想 10、结构与条理 10、语言与表达 10、素材与论证 10",
+         "总分": 40}
+    assert not lib.missing_vars("assistant_essay", v), "有变量未声明"
+    assert not lib.check_inputs("assistant_essay", v), "合规输入不应报错"
+    prompt = lib.build("assistant_essay", v, fewshot=True)
+    assert "{{" not in prompt
+    assert "（正文）" in prompt, "必须把学生作文传进 prompt"
+    assert "立意与思想 10" in prompt, "必须把评分维度传进 prompt"
+    for sec in ESSAY_SECTIONS:
+        assert f"【{sec}】" in prompt, f"输出格式缺模块 {sec}"
+
+
+def test_essay_template_is_subjective_not_objective():
+    """作文模板不得退回客观题评分口径（对/错 + 分子分母）。
+
+    主观题没有唯一答案，需要的是「分维度 + 等级」，把两种评分模型混在一个模板里
+    会让输出格式互相打架——这正是单开 assistant_essay 的原因。
+    """
+    prompt = lib.build("assistant_essay", {}, fewshot=False)
+    assert "【维度得分】" in prompt and "【等级】" in prompt
+    assert "【答案判定】" not in prompt, "主观题模板不应出现「答案判定」"
+    assert "一类文" in prompt and "四类文" in prompt, "缺少等级及其判据"
+
+
+def test_essay_total_is_input_contract():
+    """【总分】的分母只能来自输入，模型不得自编（与 assistant 的本题满分同一约定）。"""
+    spec = lib.input_spec("assistant_essay")
+    assert spec.get("总分", {}).get("type") == "number"
+    bad = lib.check_inputs("assistant_essay", {"总分": "还行"})
+    assert any(p.name == "总分" for p in bad), "非数值的总分应被入口预检拦下"
+
+
+def test_qa_and_supervisor_use_sections():
+    """qa / supervisor 已从旧式 system 重写为 sections。
+
+    旧结构只认 7 个固定字段，多写的自定义小节会被**静默丢弃**，
+    所以【输出纪律】这类小节只能存在于新式结构里。
+    """
+    for role in ("qa", "supervisor"):
+        t = lib.templates[role]
+        assert t.get("sections"), f"{role} 应使用 sections 结构"
+        assert "system" not in t, f"{role} 不应再保留 system 字段"
+        prompt = lib.build(role, {}, fewshot=False)
+        assert "【输出纪律】" in prompt, f"{role} 缺输出纪律小节"
+        assert "【输出前自检】" in prompt, f"{role} 缺输出前自检"
+
+
+def test_no_template_uses_legacy_format():
+    """模板库里已无角色使用旧式 system 结构（唯一一个 system_base 已归档到 _archive/）。
+
+    归档理由：它不被任何代码/测试/评测引用（死文件），却能让人以为
+    “库里 7 个字段的旧结构还在用”。但**兼容性并未取消**——见下一个测试。
+    """
+    legacy = [r for r in lib.list_roles() if not lib.templates[r].get("sections")]
+    assert legacy == [], f"仍有角色使用旧式 system 结构：{legacy}"
+    assert (ROOT / "_archive" / "system_base.yaml").exists(), "归档文件不应被删掉"
+
+
+def test_legacy_system_format_still_supported():
+    """旧式 system 结构仍受支持：把归档文件放进最小目录，应能正常构建。
+
+    这条测试同时验证了“最小模板目录”可用（只需 templates/，不需要 cot/）。
+    """
+    legacy = (ROOT / "_archive" / "system_base.yaml").read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "templates").mkdir()
+        (root / "templates" / "legacy.yaml").write_text(legacy, encoding="utf-8")
+        lib2 = PromptLib(root)
+        assert lib2.list_roles() == ["legacy"]
+        prompt = lib2.build("legacy", {"角色描述": "初中数学教师", "一句话说明核心任务": "讲清概念"})
+    for sec in ("【角色设定】", "【你的目标】", "【能力边界】", "【对话对象】",
+                "【语气与风格】", "【输出格式】"):
+        assert sec in prompt, f"旧结构渲染丢了小节：{sec}"
+    assert "初中数学教师" in prompt
+
+
+def test_qa_rewrite_keeps_original_content():
+    """重写不得丢内容：qa 原七个字段的内容必须逐项还在。"""
+    p = lib.build("qa", {"学科": "初中数学", "学生水平": "基础",
+                          "知识点链": "因式分解 → 求根"}, fewshot=False)
+    for key in ("负责回答学生的提问", "教会", "告诉答案", "切换讲解深度",
+                "强行讲超纲内容", "当前水平为基础档", "鼓励学生思考"):
+        assert key in p, f"qa 重写后丢了：{key}"
+    for sec in ("【思路引导】", "【分步讲解】", "【分层适配】", "【同类题】", "【知识点链接】"):
+        assert sec in p, f"qa 重写后丢了输出模块：{sec}"
+    assert "第五部分" not in p, "qa 原有一处失效引用（见第五部分）应已清除"
+
+
+def test_supervisor_rewrite_keeps_original_content():
+    """重写不得丢内容：supervisor 原七个字段的内容必须逐项还在。"""
+    p = lib.build("supervisor", {"学生姓名": "小明", "学生水平": "基础",
+                                  "学习数据": "45 道/62%", "待复习知识点": "整式乘法"},
+                  fewshot=False)
+    for key in ("温暖耐心的学习督学", "用对话的方式提醒", "庆祝进步", "责骂、威胁",
+                "泄露学生隐私", "违背其意愿", "我们一起来"):
+        assert key in p, f"supervisor 重写后丢了：{key}"
+    for sec in ("【一句话问候】", "【数据回顾】", "【今日任务】", "【激励语】", "【复习提醒】"):
+        assert sec in p, f"supervisor 重写后丢了输出模块：{sec}"
+
+
+def test_teacher_fewshot_covers_humanities():
+    """范文集必须含文科示例，且文科示例里不得出现理科符号。"""
+    exs = lib.fewshots["teacher"].get("examples", [])
+    assert len(exs) >= 3, "范文集仍应保留原有数学示例"
+    human = [e for e in exs if "作用" in e["input"] or "环境描写" in e["input"]]
+    assert human, "范文集缺文科示例（原版 5 份范文全为理科）"
+    out = human[0]["output"]
+    for sym in ("公式", "×", "÷", "x²", "=", "定理"):
+        assert sym not in out, f"文科范文里不应出现理科记号：{sym}"
+
+
+def test_planner_eval_has_humanities_case():
+    """评测用例必须含文科，否则文科路径永远不被验证。"""
+    from eval_planner import CASES
+    assert "chinese" in CASES, "eval_planner 缺文科用例"
+    for key in ("学科", "学习目标", "总周期", "每周可投入时间", "学生水平"):
+        assert key in CASES["chinese"], f"文科用例缺字段 {key}"
+    assert "语文" in CASES["chinese"]["学科"]
+
+
+def test_essay_validator_catches_wrong_arithmetic():
+    """作文校验器必须能抓出「各维得分之和 ≠ 总分」——主观题最常见的对不上账。"""
+    case = {"总分": 40, "维度": {"立意与思想": 10, "结构与条理": 10,
+                                   "语言与表达": 10, "素材与论证": 10}}
+    good = ("1. 【总分】24/40\n2. 【维度得分】立意与思想 6/10 —— a\n结构与条理 6/10 —— b\n"
+            "语言与表达 7/10 —— c\n素材与论证 5/10 —— d\n3. 【等级】三类文（60%）\n"
+            "4. 【亮点】「看清风景」一句好\n5. 【逐条问题】① 「总之」重复\n"
+            "6. 【改进建议】改成答一个问题。示范改写：我把晚饭站着扒完。\n7. 【置信度】高\n")
+    assert all(ok for _, ok, _ in validate_essay(good, case)), "合规样本应全项通过"
+
+    bad = good.replace("24/40", "30/40")
+    failed = [n for n, ok, _ in validate_essay(bad, case) if not ok]
+    assert "维度得分之和=总分" in failed, f"应抓出加法不符，实际检出 {failed}"
+    assert "等级与总分占比自洽" in failed, "40 分之 30 应为二类文，写三类文应被检出"
+
+
+def test_essay_validator_requires_quotes():
+    """每条评价都要有原文落点：没有「」引用的评语应被检出（防无落点套话）。"""
+    case = {"总分": 40, "维度": {"立意与思想": 10}}
+    raw = ("1. 【总分】6/40\n2. 【维度得分】立意与思想 6/10 —— a\n3. 【等级】四类文\n"
+           "4. 【亮点】语言优美\n5. 【逐条问题】逻辑不清\n"
+           "6. 【改进建议】示范改写：xx\n7. 【置信度】高\n")
+    failed = [n for n, ok, _ in validate_essay(raw, case) if not ok]
+    assert "亮点有原文引用" in failed and "逐条问题有原文引用" in failed
+
+
+def test_qa_fewshot_exists_and_covers_both_cultures():
+    """答疑范文：原来 qa 是唯一零样本的角色（且答疑最需要风格锚定）。
+
+    新范文必须同时覆盖理科与文科，且文科例里不得出现理科符号。
+    """
+    assert "qa" in lib.list_fewshots(), "qa 应有范文"
+    exs = lib.fewshots["qa"]["examples"]
+    assert len(exs) >= 2, "至少理科、文科各一例"
+    for ex, must in zip(exs, ("数学", "语文")):
+        assert must in ex["input"], f"范文缺{must}示例"
+    zh = [e for e in exs if "语文" in e["input"]][0]["output"]
+    for sym in ("×", "÷", "x²", "=", "公式"):
+        assert sym not in zh, f"文科范文不应出现理科记号：{sym}"
+    assert "「" in zh, "文科范文应有原文引用"
+
+
+def test_qa_fewshot_keeps_guidance_not_answers():
+    """范文的【思路引导】不得直接把结论写出来——这是答疑与搜题的分界线。
+
+    断言用 validate_qa 的同一口径，避免“范文合规”与“校验器标准”两套。
+    """
+    exs = lib.fewshots["qa"]["examples"]
+    probes = [{"答案词": ["同号得正"]}, {"答案词": ["取消句子独立性"]}]
+    for ex, probe in zip(exs, probes):
+        failed = [n for n, ok, _ in validate_qa(ex["output"], probe,
+                                                check_contamination=False) if not ok]
+        assert not failed, f"范文未通过校验：{failed}"
+
+
+def test_qa_template_carries_the_question():
+    """qa 必须能承载「学生提问」本身。
+
+    原版只写「回答学生的提问」，却没有任何字段承载提问，
+    只能靠调用方另发一条 user 消息，范文的【示例输入】也就无处对标。
+    """
+    assert "学生提问" in lib.missing_vars("qa", {}), "qa 应有 {{学生提问}} 占位符"
+    p = lib.build("qa", {"学科": "初中数学", "学生水平": "基础",
+                          "知识点链": "A → B", "学生提问": "为什么 1+1=2？"}, fewshot=False)
+    assert "【本次提问】" in p and "为什么 1+1=2？" in p
+    assert "{{学生提问}}" not in p
+    # 缺提问时应被入口预检拦下（不是交给模型猜）
+    blanks = blank_inputs(lib, "qa", {"学生提问": ""})
+    assert "学生提问" in blanks
+
+
+def test_qa_validator_catches_answer_leak():
+    """校验器必须能抓出「把结论写进【思路引导】」——否则这条断言等于没装。"""
+    raw = ("1. 【思路引导】直接告诉你：同号得正。\n2. 【分步讲解】x\n"
+           "3. 【分层适配】基础档：讲得慢一点。\n4. 【同类题】算 (-2)×(-3)。\n"
+           "5. 【知识点链接】有理数乘法法则 → 相反数 → 数轴\n")
+    failed = [n for n, ok, _ in validate_qa(raw, {"答案词": ["同号得正"],
+                                                "链内": ["相反数"]}) if not ok]
+    assert any("思路引导未给出结论" in f for f in failed), f"漏检：{failed}"
+    assert not any("模块" in f for f in failed), "该样本结构是完整的，不应报模块问题"
 
 
 if __name__ == "__main__":

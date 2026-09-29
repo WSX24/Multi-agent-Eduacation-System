@@ -115,6 +115,15 @@ def unit_variables(
 
     这是 M1 与 M2 之间唯一的映射来源——评测与生产都走这里，
     避免两处各写一份而逐渐偏离。
+
+    三个学情字段**刻意不同源**（早先两个字段同源，拼出来是病句，而且让模型
+    以为手里有两份独立证据）：
+
+    | 变量 | 取自 | 作用 |
+    |---|---|---|
+    | 上一章测验结果 | 章节测验正确率 | **主依据**：数值驱动升/降档 |
+    | 学情数据 | 近期练习数据或单元完成度 | 辅助信息，不与主依据重复 |
+    | 前置薄弱点 | 错题归因列表 | 告知在哪里反复强调 |
     """
     progress = progress or {}
     meta = course.get("course", {})
@@ -122,18 +131,32 @@ def unit_variables(
     units = ch["units"]
     unit = units[unit_index]
 
-    # 上一章测验结果 → 驱动难度自适应
     prev_id = ch.get("unlock", {}).get("chapter")
+    rec = (progress.get(prev_id) or {}) if prev_id else {}
+
+    # ① 上一章测验结果：主依据（inputs 契约里是 percent 类型 + 嗲兵值）
     if not prev_id:
-        prev_result, stu_data, prev_weak = "无（首章）", "数据不足", "无"
+        prev_result = "无（首章）"
+    elif rec.get("rate") is None:
+        prev_result = "无数据"
     else:
-        rec = progress.get(prev_id) or {}
-        if rec.get("rate") is None:
-            prev_result, stu_data = "无数据", "数据不足"
-        else:
-            prev_result = f"正确率 {rec['rate']:.0%}"
-            stu_data = f"{prev_id} 章节测验正确率 {rec['rate']:.0%}"
-        prev_weak = "、".join(rec.get("weak") or []) or "无"
+        prev_result = f"正确率 {rec['rate']:.0%}"
+
+    # ② 学情数据：只装「主依据与薄弱点都没说」的信息，避免重复注入同一个数字
+    practice = rec.get("practice") or {}          # 可选：{"days": 7, "count": 45, "rate": 0.62}
+    done = len(rec.get("units_done") or [])
+    total_units = len(_chapter(course, prev_id)["units"]) if prev_id else 0
+    if practice.get("rate") is not None:
+        stu_data = (f"近 {practice.get('days', 7)} 天练习 {practice.get('count', 0)} 题，"
+                    f"正确率 {practice['rate']:.0%}")
+    elif prev_id and done:
+        stu_data = (f"{prev_id} 已完成 {done}/{total_units} 个单元，"
+                    f"暂无近期练习数据")
+    else:
+        stu_data = "数据不足"
+
+    # ③ 前置薄弱点：错题归因列表
+    prev_weak = "、".join(rec.get("weak") or []) or "无"
 
     # 本章含复习单元时，开启复习衔接
     has_review = any(u.get("type") == "复习" for u in units)
