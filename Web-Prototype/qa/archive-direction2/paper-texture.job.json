@@ -1,9 +1,0 @@
-{
-  "endpoint": "/images/generations",
-  "model": "agnes-image-2.5-flash",
-  "size": "1024x768",
-  "output": "source\\paper-texture-4x3.png",
-  "reference_images": [],
-  "usage": null,
-  "created": 1790391690
-}
