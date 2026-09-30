@@ -93,7 +93,7 @@ CONFIGS = {
                      "学习数据": "本周做题 20 道，正确率 92%；连续打卡 7 天",
                      "待复习知识点": "因式分解"},
         },
-        validate=lambda raw, case: validate_supervisor(raw),
+        validate=lambda raw, case: validate_supervisor(raw, case),
     ),
 }
 

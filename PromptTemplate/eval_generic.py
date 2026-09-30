@@ -77,10 +77,139 @@ validate_assistant = make_section_validator(
     ASSISTANT_SECTIONS,
     contamination=["一元二次方程", "x² - 5x + 6", "x = 2", "x = 3", "代回检验", "求根"],
 )
-validate_supervisor = make_section_validator(
-    SUPERVISOR_SECTIONS,
-    contamination=["小明", "45 道", "62%", "提公因式法", "整式乘法", "3 天未登录"],
-)
+
+
+# ─────────────────────────── 督学 Agent（supervisor）───────────────────────────
+# 督学是 8 个角色里唯一「流程里真跑、却没人针对性验过」的一个（见 V2.0-说明.md
+# 缺口 #2）。旧实现只有 make_section_validator 生成的**结构**校验：5 个模块齐不齐、
+# 顺序、有无 LaTeX、有无污染词。而模板里最要紧的约束全在「输出纪律」那一段，
+# 全是内容：
+#   ①【数据只用输入的】不得编造做题量 / 正确率 / 打卡天数
+#   ②【任务必须可完成】1-3 个，且写明「做什么 + 做多少」
+#   ③【不制造焦虑】禁止倒计时、落后、惩罚、「再不学就来不及了」
+#   ④【复习提醒要有依据】要说明为什么现在提醒，不能只罗列知识点名
+# 这四条都能程序化判定，所以照样能进闸门（驱动在 eval_supervisor.py）。
+# 此前一条都没被验过——模板写了规则、没人查，这正是「模板 ≠ 契约」的典型缺口。
+
+# 制造焦虑的词：全部取自模板「输出纪律」第 3 条。只收方向明确的，
+# 不收要看语境的（如「紧张」在「别紧张」里是正向的）。
+SUPERVISOR_ANXIETY = ["倒计时", "落后", "惩罚", "来不及", "再不学", "再不努力",
+                      "必须马上", "最后机会", "只剩", "扣分", "淘汰"]
+# 「不得与其他同学比较」（输出纪律第 1 条后半）
+SUPERVISOR_COMPARE = ["排名", "名次", "其他同学", "别的同学", "全班", "班上",
+                      "比谁", "别人都"]
+# 「先讲亮点」用的正 / 负向表述（模板：先讲亮点，提醒拖延时先说亮点再说改进）
+SUPERVISOR_POSITIVE = ["不错", "棒", "稳", "赞", "很好", "扎实", "坚持", "进步",
+                       "优秀", "亮眼", "厉害", "了不起", "为你高兴", "值得肯定"]
+SUPERVISOR_NEGATIVE = ["偏低", "不足", "薄弱", "下滑", "不理想", "退步", "错误率",
+                       "没完成", "欠佳", "问题较大", "吃力"]
+# 「复习提醒要有依据」：要说出为什么现在提醒（遗忘规律 / 距离上次多久 / 近期出错）
+SUPERVISOR_REASONS = ["遗忘", "规律", "曲线", "节点", "间隔", "周期", "上次", "几天",
+                      "过久", "久了", "未登录", "错题", "出错", "前些天"]
+# 范文里特有的**数据**，用于检测「照抄范文」。
+# ⚠️「小明」刻意不在表内：它是用例输入里的学生姓名（同题用例），放进来会让每份
+#    正常输出都命中 → 100% 误报。这与 eval_qa 踩过的坑同类：污染词表必须**双向**
+#    审计——既要在范文里出现（否则永远命不中），又不能出现在用例输入里（否则必然
+#    误报）。eval_supervisor.self_check 把这两个方向都钉成了断言。
+SUPERVISOR_CONTAMINATION = ["45 道", "62%", "提公因式法", "整式乘法", "3 天未登录"]
+
+# 「做多少」的量化表述：阿拉伯数字或中文数字 + 量词。
+# 刻意不收「一下」（「标一下」只是随口一句，不含完成标准）。
+_QTY = re.compile(
+    r"(?:\d+\s*(?:分钟|分|道|题|遍|个|篇|次|页|组|句|行|条|步)"
+    r"|[一二两三四五六七八九十]+\s*(?:分钟|分|道|题|遍|个|篇|次|句|行|条|步))")
+
+
+def count_task_items(body: str) -> list[str]:
+    """把【今日任务】切成分条，容忍 ①②③ 与 `1.` / `1、` / `-` 两种写法。"""
+    chunks = [c.strip() for c in re.split(r"(?=[①-⑳])", body)]
+    items = [c for c in chunks if re.match(r"^[①-⑳]", c)]
+    if items:
+        return items
+    return [l.strip() for l in body.splitlines()
+            if re.match(r"^(?:\d{1,2}\s*[.、)]|[-*•])\s*\S", l.strip())]
+
+
+def validate_supervisor(raw: str, case: dict | None = None, *,
+                        check_contamination: bool = True) -> list[tuple[str, bool, str]]:
+    """督学专用校验。``case`` 可给：
+
+    ``学生姓名`` / ``学习数据`` / ``待复习知识点`` / ``任务上限``
+
+    ``case`` 缺省时只做与输入无关的检查（结构、焦虑词、禁比较、任务条数、量化），
+    与输入相关的检查（数据不编造、引用待复习知识点、问候含姓名）自动跳过——
+    这样旧的调用点（eval_skeleton_rollout 的骨架对照实验）不传 case 也不误报。
+    """
+    case = case or {}
+    checks: list[tuple[str, bool, str]] = []
+
+    def add(name: str, ok: bool, detail: str = "") -> None:
+        checks.append((name, ok, detail))
+
+    order, bodies = split_by_names(raw, SUPERVISOR_SECTIONS)
+    missing = [s for s in SUPERVISOR_SECTIONS if s not in bodies]
+    add(f"模块齐全({len(SUPERVISOR_SECTIONS)})", not missing, f"缺 {missing}" if missing else "")
+    if missing:
+        return checks
+    idx = [order.index(s) for s in SUPERVISOR_SECTIONS]
+    add("模块顺序正确", idx == sorted(idx), f"实际 {order}")
+
+    if case.get("学生姓名"):
+        add("问候叫出学生姓名", case["学生姓名"] in bodies["一句话问候"],
+            f"【一句话问候】里没出现 {case['学生姓名']}")
+
+    # ---- ① 数据只用输入的：不得编造 ----
+    if case.get("学习数据"):
+        allowed = set(re.findall(r"\d+(?:\.\d+)?", str(case["学习数据"])))
+        invented = sorted({n for n in re.findall(r"\d+(?:\.\d+)?", bodies["数据回顾"])
+                           if n not in allowed})
+        add("数据回顾只用输入数据", not invented,
+            f"出现输入里没有的数字 {invented}（编造学习数据）" if invented else "")
+    leak_cmp = [t for t in SUPERVISOR_COMPARE if t in raw]
+    add("不与同学比较", not leak_cmp, f"出现 {leak_cmp}" if leak_cmp else "")
+
+    # ---- 「先讲亮点」（输出纪律第 3 条后半）----
+    seg = bodies["数据回顾"]
+    pos = [m.start() for k in SUPERVISOR_POSITIVE for m in re.finditer(k, seg)]
+    neg = [m.start() for k in SUPERVISOR_NEGATIVE for m in re.finditer(k, seg)]
+    if neg:
+        add("数据回顾先讲亮点", bool(pos) and min(pos) < min(neg),
+            f"先说了负面（{'/'.join(k for k in SUPERVISOR_NEGATIVE if k in seg[:min(neg) + 6])}）"
+            if not pos or min(pos) > min(neg) else "")
+    else:
+        add("数据回顾有正向表述", bool(pos), "全段没有一句正向的话")
+
+    # ---- ② 任务 1-3 个，且每条写明「做什么 + 做多少」----
+    items = count_task_items(bodies["今日任务"])
+    add("今日任务 1-3 个", 1 <= len(items) <= 3, f"数到 {len(items)} 条")
+    cap = case.get("任务上限")
+    if cap:
+        add(f"任务不超过 {cap} 个（{case.get('学生水平', '低')}档减量）", len(items) <= cap,
+            f"给了 {len(items)} 条，低水平档不得加量")
+    if items:
+        thin = [it for it in items if not _QTY.search(it)]
+        add("每条任务写明做多少", not thin,
+            f"{len(thin)}/{len(items)} 条只说了做什么：{thin[0][:34]}" if thin else "")
+
+    # ---- ③ 不制造焦虑 ----
+    anxious = [t for t in SUPERVISOR_ANXIETY if t in raw]
+    add("不制造焦虑", not anxious, f"出现 {anxious}" if anxious else "")
+
+    # ---- ④ 复习提醒要有依据，且引用输入的待复习知识点 ----
+    seg2 = bodies["复习提醒"]
+    add("复习提醒说明依据", any(k in seg2 for k in SUPERVISOR_REASONS),
+        f"只罗列了内容、没讲为什么现在提醒：{seg2[:34]}")
+    if case.get("待复习知识点"):
+        toks = [t for t in re.split(r"[、,，/／\s]+", str(case["待复习知识点"])) if t]
+        add("复习提醒引用待复习知识点", any(t in seg2 for t in toks),
+            f"一个都没提到：{toks}")
+
+    latex = [t for t in LATEX if t in raw]
+    add("无 LaTeX 记号", not latex, f"出现 {latex}" if latex else "")
+    if check_contamination:
+        leak = [t for t in SUPERVISOR_CONTAMINATION if t in raw]
+        add("无 Few-shot 数据污染", not leak, f"混入 {leak}" if leak else "")
+    return checks
 
 
 # ─────────────────────── 作文/主观题批改（主观题评分模型） ───────────────────────
