@@ -1,0 +1,115 @@
+/* ─────────────────────────────────────────────────────────────────────
+ * 智塾 · AI Teaching Platform
+ * tokens.css — design-system contract.
+ *
+ * 主题：浅色（白底）。由用户在 2026-09-25 明确要求从深色改为白色主题，
+ * 并放弃双主题方案。令牌名称与结构保持不变，只反转取值，因此全部
+ * color-mix(in oklch, var(--bg) …) 的派生态自动跟随，无需逐处改写。
+ *
+ * 两处相对深色版的必要调整（不是随意改色）：
+ *   1. --accent 由 #a855f7 改为 #9333ea。同一紫色在白底上对比度只有
+ *      3.4:1，达不到正文的 WCAG AA；降低一档后约 5.2:1。见 .badge--accent
+ *      这类把 --accent 当文字色的用法。悬停因此改为「变亮」而非「变暗」。
+ *   2. 阴影一律改为低透明度的中性色，深色主题里那种 92% 黑的不透明投影
+ *      在白底上会变成一个黑块。
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #ffffff;              /* flat pure white canvas — 与生成的机器人背景精确一致 */
+  --surface:      #f7f7f8;              /* card / sidebar / search bar fill */
+  --surface-warm: var(--surface);       /* no warm tier in this achromatic system */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #0f0f10;                      /* near-black — body copy, headings */
+  --fg-2: var(--fg);                    /* DESIGN.md §2 has a single primary tier */
+  --muted: #5c5c5e;                     /* secondary — meta, captions, labels */
+  --meta:  #9b9b9b;                     /* tertiary — placeholder, disabled */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      #e6e6e8;               /* divider, input border, card edge */
+  --border-soft: #f1f1f2;               /* inner row separator + elevated tier */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  /* 淡蓝：首屏 CTA「开始学习」的底色（用户 2026-09-26 指定）。
+     与紫色的 --accent 并存：紫色仍是全站强调色，淡蓝只用于首屏末幕的按钮。 */
+  /* 首屏文案色。用户 2026-09-26 先指定 #0078D4，实测它在影片上只有 1.83:1
+     看不出蓝，随后改回**黑色**。用项目的 heading 近黑 --fg (#0f0f10)：
+     压在影片上 5.4–8.0:1，本来就清楚。
+     想再切回蓝：#0078D4 需 1.83:1（看不出）、#17479a 是 3.21:1（能过）。
+     配套的淡亮底片见 css/landing.css 的 .say-item::before —— 白，alpha .34。 */
+  --say-ink:       #0f0f10;
+  /* 亮片（半透明白底）的不透明度，只写这一处：按钮与「Teaching Platform」字标共用。
+     用户要求「高透明度」。0.5 = 50% 透明。调小更透、调大更实。 */
+  --plate:         rgba(255, 255, 255, .5);
+  --sky:           #b7dcf5;
+  --sky-hover:     #a3d0ef;
+  --sky-active:    #8cc3e8;
+  --accent:        #9333ea;             /* violet — one step darker than the dark theme
+                                           so it clears AA contrast on white */
+  --accent-on:     #ffffff;             /* white on accent for buttons / badges */
+  --accent-hover:  #a855f7;             /* lighter violet hover — brightens on light */
+  --accent-active: #7e22ce;             /* darker pressed */
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #22c55e;                   /* verified source badge */
+  --warn:    #f59e0b;                   /* caution */
+  --danger:  #ef4444;                   /* error state */
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body:    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, Monaco, Consolas, monospace;
+
+  --text-xs:   11px;                    /* caption — source labels, timestamps */
+  --text-sm:   13px;                    /* body-sm — secondary, meta */
+  --text-base: 15px;                    /* body — primary reading copy */
+  --text-lg:   16px;                    /* reading-large — source card titles */
+  --text-xl:   18px;                    /* heading-m — sub-section heading */
+  --text-2xl:  22px;                    /* heading-l — section heading */
+  --text-3xl:  28px;                    /* sub-display — intermediate hero step */
+  --text-4xl:  32px;                    /* display — page title, hero answer */
+
+  --leading-body:     1.65;
+  --leading-tight:    1.2;
+  --tracking-display: -0.01em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 64px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 0 0 1px var(--border);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  --focus-ring: 0 0 0 2px var(--accent);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   120ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1100px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   16px;
+}
