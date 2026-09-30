@@ -21,6 +21,7 @@ PromptTemplate/
 ├── eval_qa.py                # 答疑评测器（核心断言：引导不喂答案）
 ├── eval_generic.py           # 通用结构校验 + 输出契约（运行时也用它）
 ├── eval_essay.py             # 作文/主观题批改评测器（分维度评分 + 判分分辨力）
+├── eval_supervisor.py        # 督学评测器（数据不编造 / 任务量 / 不制造焦虑 / 复习依据）
 ├── eval_fewshot_variants.py  # Few-shot 变体对照实验
 ├── eval_skeleton_rollout.py  # 骨架示例 vs 完整实例对照实验
 ├── probe_same_topic.py       # 同题撞车探针（检测「换数字抄袭」）
@@ -108,6 +109,8 @@ python eval_essay.py --self-check                 # 离线检查作文批改用�
 python eval_essay.py -n 2                         # 真实模型评测：作文批改（含判分分辨力）
 python eval_qa.py --self-check                    # 离线检查答疑范文与校验器
 python eval_qa.py -n 2                            # 真实模型评测：答疑（引导不喂答案）
+python eval_supervisor.py --self-check            # 离线检查督学范文、词表双向审计与校验器
+python eval_supervisor.py -n 2                    # 真实模型评测：督学（不焦虑 / 任务量 / 复习依据）
 python quality_gate.py                             # 照抄检测器自测
 ```
 
@@ -123,7 +126,7 @@ python quality_gate.py                             # 照抄检测器自测
 
 ### L2 回放：为什么需要它
 
-10 个 `eval_*.py` 把「拿到模型输出」与「校验输出」焊在同一个进程里：没有 Key 就
+11 个 `eval_*.py` 把「拿到模型输出」与「校验输出」焊在同一个进程里：没有 Key 就
 `sys.exit(2)`，根本走不到断言。于是校验器自身的错误只能靠真跑 + 人眼发现——而本项目
 已经出过 5 次，**全部是误报**（qa 三条污染词表/关键词误报、essay 一条范文自引用误报、
 照抄检测通用版对 YAML 蓝图 100% 误报）。
@@ -147,6 +150,7 @@ python replay_eval.py --expect eval_baseline.txt --strict
 - 两种都抓不到：模型行为退化。那是 L3 的地盘，回放永远替代不了真跑。
 
 > ⚠️ `eval_runs/` 在 `.gitignore` 里，所以 L2 只能在**留过录制的那台机器上**跑。
+> 语料缺失时回放**直接退码 2**，而不是把「零份录制」当成「全部通过」。
 > 换一台机器，清单里的文件名就不存在——此时守门模式**直接报错退出（退码 2）**，
 > 而不是把“一份都没跑”当成“全部通过”。要让 L2 进 CI，必须先解决语料入库
 > （见 `EVAL-REPORT.md` 第四节缺口 #2）。
