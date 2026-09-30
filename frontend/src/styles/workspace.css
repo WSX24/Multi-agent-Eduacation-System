@@ -1,0 +1,34 @@
+.workspace-mark {
+  margin-left: auto;
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.side-user-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-sm);
+}
+
+.app-nav-backdrop { display: none; }
+
+@media (max-width: 1000px) {
+  .app-nav-backdrop {
+    position: fixed;
+    z-index: 36;
+    inset: 0;
+    display: block;
+    border: 0;
+    background: color-mix(in oklch, var(--fg) 24%, transparent);
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace-mark { display: none; }
+  .chat { min-height: 460px; }
+  .composer-hint { flex-direction: column; gap: 4px; }
+}
