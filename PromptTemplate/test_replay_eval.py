@@ -47,6 +47,28 @@ def test_discover_splits_role_and_case_on_first_underscore():
     assert rec.label == "qa/physics_导热"
 
 
+def test_discover_strips_experiment_prefix_instead_of_silently_skipping(tmp_path):
+    """实验脚本的录制名把「运行种类」写在角色前，必须先剥掉一层。
+
+    不剥的后果不是报错，而是**静默少验**：报告里只多一句“涉及前缀 rollout”，
+    看上去一片绿。supervisor 的 6 份录制就是这样躲过 L2 的（V2.0-说明.md 缺口 #2）。
+    """
+    name = "rollout_supervisor_完整实例_同题_20260926_221243_1.md"
+    (tmp_path / name).write_text("1. 【一句话问候】小明\n", encoding="utf-8")
+    recs, skipped = R.discover(tmp_path)
+    assert not skipped
+    assert len(recs) == 1
+    rec = recs[0]
+    assert rec.kind == "rollout"
+    assert rec.key == ("supervisor", "完整实例_同题"), "前缀没剥干净，永远匹配不上已登记用例"
+    assert rec.label == "rollout_supervisor/完整实例_同题", "报告里仍要能认出它来自哪类实验"
+
+    # 角色名本身以实验前缀开头时不得误剥（不存在这种角色，但契约要明确）
+    (tmp_path / "teacher_基础_20260927_171022_1.md").write_text("x", encoding="utf-8")
+    recs2, _ = R.discover(tmp_path)
+    assert ("teacher", "基础") in {r.key for r in recs2}
+
+
 # ------------------------------------------------------------------ 取代关系
 def test_superseded_drops_first_attempt_when_retry_exists():
     """重试机制会同时留下首轮（失败）与 `_r1`（修正后）两份。
@@ -78,6 +100,7 @@ def test_registry_covers_every_case_of_every_eval_script():
     import eval_planner
     import eval_qa
     import eval_sprint
+    import eval_supervisor
     import eval_teacher
     import eval_unit
 
@@ -88,12 +111,19 @@ def test_registry_covers_every_case_of_every_eval_script():
         "planner": list(eval_planner.CASES),
         "qa": list(eval_qa.CASES),
         "sprint": list(eval_sprint.CASES),
+        "supervisor": list(eval_supervisor.CASES),
         "teacher": list(eval_teacher.CASES),
         "unit": list(eval_unit.CASES),
     }
     for role, cases in expected.items():
         for case in cases:
             assert (role, case) in targets, f"{role}/{case} 未登记，回放会静默漏掉它"
+
+    # 消融实验留下的录制用的是它自己的用例名（把 Few-shot 条件编进了名字），
+    # 别名也必须登记——否则那 6 份 supervisor 录制照样落进“未登记”堆里。
+    for alias, name in eval_supervisor.REPLAY_ALIASES.items():
+        assert ("supervisor", alias) in targets, f"别名 {alias} 未登记"
+        assert name in eval_supervisor.CASES, f"别名 {alias} 指向不存在的用例 {name}"
 
     # 「字段缺失」由入口预检拦下，永远不产生录制，故刻意不登记
     assert ("assistant", "字段缺失") not in targets
@@ -112,6 +142,18 @@ requires_runs = pytest.mark.skipif(
     not RUNS.exists() or not list(RUNS.glob("*.md")),
     reason="需要 eval_runs/ 里的真实录制（该目录被 gitignore）",
 )
+
+
+@requires_runs
+def test_supervisor_recordings_are_replayed_not_skipped():
+    """消融实验留下的 6 份 supervisor 录制必须真进回放（此前被静默跳过）。"""
+    recs, _ = R.discover(RUNS)
+    sup = [r for r in recs if r.role == "supervisor"]
+    assert len(sup) >= 6, f"应当找到消融实验的 supervisor 录制，实得 {len(sup)}"
+    targets = R.build_targets()
+    outcomes, unregistered = R.run_all(sup, targets)
+    assert not unregistered, "supervisor 录制仍未被登记"
+    assert all(o.checks for o in outcomes), "登记了却没真跑断言（空检查项＝假绿）"
 
 
 @requires_runs

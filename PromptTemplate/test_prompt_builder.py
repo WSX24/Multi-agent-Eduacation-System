@@ -11,7 +11,8 @@ import yaml
 
 from demo_course_flow import (build_planner_prompt, build_unit_prompt, can_unlock,
                               parse_blueprint, unit_variables)
-from eval_generic import ESSAY_SECTIONS, validate_essay, validate_qa
+from eval_generic import (ESSAY_SECTIONS, SUPERVISOR_SECTIONS, count_task_items,
+                          validate_essay, validate_qa, validate_supervisor)
 from eval_unit import split_sections, validate as validate_unit
 from eval_sprint import count_duration_hours, split_sections as split_sprint_sections, validate as validate_sprint
 from prompt_builder import PromptLib
@@ -997,6 +998,99 @@ def test_supervisor_rewrite_keeps_original_content():
         assert key in p, f"supervisor 重写后丢了：{key}"
     for sec in ("【一句话问候】", "【数据回顾】", "【今日任务】", "【激励语】", "【复习提醒】"):
         assert sec in p, f"supervisor 重写后丢了输出模块：{sec}"
+
+
+# ──────────────── 督学校验器：四条内容约束（此前一条都没验过）────────────────
+# 抽成模块级常量，便于“合规样本必须全过 / 坏样本必须被点名”两头都钉住。
+SUP_CASE = {
+    "学生姓名": "小明",
+    "学生水平": "基础",
+    "学习数据": "本周做题 20 道，正确率 92%；连续打卡 7 天",
+    "待复习知识点": "因式分解",
+    "任务上限": 3,
+}
+SUP_GOOD = """1. 【一句话问候】小明，晚上好呀，我们先看看这周的小进步。
+2. 【数据回顾】这周你做了 20 道题，正确率 92%，而且连续打卡 7 天，很稳！
+3. 【今日任务】① 用 10 分钟默写因式分解的公式；② 做 3 道基础题并马上对答案。
+4. 【激励语】你已经在稳稳往前走了，继续保持！
+5. 【复习提醒】按照遗忘规律，因式分解这两天该回看啦，花 5 分钟翻翻笔记。
+"""
+
+
+def test_supervisor_good_sample_passes_every_check():
+    """合规样本必须全项通过——否则校验器就是一台误报机，红灯没人看。"""
+    failed = [n for n, ok, d in validate_supervisor(SUP_GOOD, SUP_CASE) if not ok]
+    assert not failed, f"合规样本被误判：{failed}"
+    assert len(validate_supervisor(SUP_GOOD, SUP_CASE)) >= len(SUPERVISOR_SECTIONS) + 6
+
+
+def test_supervisor_content_rules_are_actually_enforced():
+    """四条内容约束逐条注入缺陷，每条都必须被点名。
+
+    它们对应模板「输出纪律」里写死的规则；此前 supervisor 只有结构校验，
+    这四条规则没任何程序化断言（V2.0-说明.md 缺口 #2）。
+    """
+    cases = {
+        # 编造学习数据：输入是 20 道 / 92%，输出写 40 道
+        "数据回顾只用输入数据": SUP_GOOD.replace("做了 20 道题", "做了 40 道题"),
+        # 先说负面再说亮点（模板：先讲亮点）
+        "数据回顾先讲亮点": SUP_GOOD.replace(
+            "这周你做了 20 道题，正确率 92%，而且连续打卡 7 天，很稳！",
+            "正确率偏低，只有 92%，而且打卡断了（做了 20 道题 7 天），不过还行。"),
+        # 任务超 3 个
+        "今日任务 1-3 个": SUP_GOOD.replace(
+            "② 做 3 道基础题并马上对答案。", "② 做 3 道基础题；③ 背 10 个单词；④ 再做 5 道题。"),
+        # 只写“做什么”、没写“做多少”
+        "每条任务写明做多少": SUP_GOOD.replace("① 用 10 分钟默写因式分解的公式",
+                                        "① 复习一下因式分解的公式"),
+        # 制造焦虑
+        "不制造焦虑": SUP_GOOD + "\n再不学就来不及了，你已经落后太多，必须马上补上。\n",
+        # 与同学比较
+        "不与同学比较": SUP_GOOD + "\n（你的排名已经掉到全班第 20 了）\n",
+        # 复习提醒只罗列知识点、不给依据
+        "复习提醒说明依据": SUP_GOOD.replace(
+            "按照遗忘规律，因式分解这两天该回看啦，花 5 分钟翻翻笔记。", "因式分解。"),
+        # 问候没叫名字
+        "问候叫出学生姓名": SUP_GOOD.replace("小明，晚上好呀", "同学你好"),
+    }
+    for expect, sample in cases.items():
+        failed = [n for n, ok, _ in validate_supervisor(sample, SUP_CASE) if not ok]
+        assert any(expect in f for f in failed), f"未检出：{expect}（实得 {failed}）"
+
+
+def test_supervisor_contamination_wordlist_is_audited_both_ways():
+    """污染词表必须双向审计：在范文里（命得中）、又不在用例输入里（不误报）。
+
+    这是已修的真缺陷：「小明」原先在词表里，而它正是用例传入的 {{学生姓名}}
+    —— 每份正常输出都被判「照抄范文」。旧调用点又把「污染」整类排除掉了，
+    所以这个误报一直没被看见（见 eval_skeleton_rollout.EXCLUDED）。
+    """
+    import eval_supervisor as ES
+    from eval_generic import SUPERVISOR_CONTAMINATION
+
+    assert "小明" not in SUPERVISOR_CONTAMINATION, "学生姓名不得进污染词表"
+    fs = lib.fewshots["supervisor"]["examples"][0]
+    blob = str(fs["input"]) + str(fs["output"])
+    for tok in SUPERVISOR_CONTAMINATION:
+        assert tok in blob, f"污染词「{tok}」不在范文里，永远命不中"
+    for name, case in ES.CASES.items():
+        text = "".join(str(v) for v in case.values())
+        hit = [t for t in SUPERVISOR_CONTAMINATION if t in text]
+        assert not hit, f"用例 {name} 输入自带污染词 {hit}，必然误报"
+
+
+def test_supervisor_eval_self_check_passes():
+    """督学评测器的离线自检（范文 + 双向审计 + 8 类注入）必须全过。"""
+    import eval_supervisor
+    eval_supervisor.self_check(lib)
+
+
+def test_count_task_items_handles_both_notations():
+    """任务分条要同时认 ①②③ 与 1. / 1、/ - 两种写法（模型两种都用）。"""
+    assert len(count_task_items("① 甲 5 分钟；② 乙 3 道")) == 2
+    assert len(count_task_items("1. 甲 5 分钟\n2. 乙 3 道\n3. 丙 2 遍")) == 3
+    assert len(count_task_items("- 甲 5 分钟\n- 乙 3 道")) == 2
+    assert count_task_items("随便做点题") == []
 
 
 def test_teacher_fewshot_covers_humanities():

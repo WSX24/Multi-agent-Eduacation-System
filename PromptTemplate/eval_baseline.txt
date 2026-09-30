@@ -7,7 +7,7 @@
 # 有文件变红，那一刻要人工判断“是校验器错了还是判定该收紧”，
 # 而不是默默把清单改小——那就把守门当成橡皮图章了。
 #
-# 生成于现有 118 份录制，收录 104 份。
+# 生成于现有 132 份录制，收录 117 份。
 assistant_全对_20260927_171022_1.md
 assistant_全对_20260927_171022_2.md
 assistant_漏单位_20260927_171022_1.md
@@ -45,6 +45,11 @@ qa_physics_导热_20260928_220406_1.md
 qa_physics_导热_20260928_220406_2.md
 qa_physics_导热_20260928_220455_1.md
 qa_physics_导热_20260928_220455_2.md
+rollout_supervisor_完整实例_同题_20260926_221243_1.md
+rollout_supervisor_完整实例_同题_20260926_221243_3.md
+rollout_supervisor_骨架示例_同题_20260926_221243_1.md
+rollout_supervisor_骨架示例_同题_20260926_221243_2.md
+rollout_supervisor_骨架示例_同题_20260926_221243_3.md
 sprint_d1_20260926_220551_1.md
 sprint_d1_20260926_220551_2.md
 sprint_d1_20260927_171241_1.md
@@ -61,6 +66,14 @@ sprint_overload_20260926_220551_1.md
 sprint_overload_20260926_220551_2.md
 sprint_overload_20260927_171241_1.md
 sprint_overload_20260927_171241_2.md
+supervisor_chinese_文言虚词_20260930_192642_1.md
+supervisor_chinese_文言虚词_20260930_192642_2.md
+supervisor_low_久未登录_20260930_192642_1.md
+supervisor_low_久未登录_20260930_192642_2.md
+supervisor_physics_浮力_20260930_192642_1.md
+supervisor_physics_浮力_20260930_192642_2.md
+supervisor_同题_20260930_192642_1.md
+supervisor_同题_20260930_192642_2.md
 teacher_noex_20260926_215151_1.md
 teacher_noex_20260927_170929_1.md
 teacher_noex_20260927_170929_2.md

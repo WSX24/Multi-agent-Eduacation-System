@@ -57,6 +57,14 @@ NAME_RE = re.compile(
     r"(?:_(?P<idx>\d+))?(?:_r(?P<retry>\d+))?\.md$"
 )
 
+# 实验脚本会在角色名最前面再挂一层「运行种类」前缀：
+#   rollout_supervisor_完整实例_同题_20260926_221243_1.md
+#   ablation_teacher_基础_...
+# 不剥掉这层，「角色」会被切出 "rollout"、用例被切出 "supervisor_完整实例_同题"，
+# 于是永远匹配不上已登记用例 → **静默跳过**。supervisor 的 6 份录制就是这样漏掉的
+# （见 V2.0-说明.md 缺口 #2）：报告里只写了句“涉及前缀 rollout”，一片绿。
+RUN_KINDS = ("rollout", "ablation", "variant", "probe")
+
 
 @dataclass(frozen=True)
 class Recording:
@@ -65,6 +73,7 @@ class Recording:
     case: str
     idx: int | None  # 同一次评测里的第 i 次采样
     retried: bool  # 重试后才通过的那一版
+    kind: str = ""  # 实验脚本挂在最前面的“运行种类”前缀（rollout / ablation / …）
 
     @property
     def key(self) -> tuple[str, str]:
@@ -82,7 +91,7 @@ class Recording:
 
     @property
     def label(self) -> str:
-        return f"{self.role}/{self.case}"
+        return f"{self.kind + '_' if self.kind else ''}{self.role}/{self.case}"
 
 
 @dataclass
@@ -117,6 +126,7 @@ def build_targets() -> dict[tuple[str, str], Validator]:
     import eval_planner
     import eval_qa
     import eval_sprint
+    import eval_supervisor
     import eval_teacher
     import eval_unit
 
@@ -148,6 +158,15 @@ def build_targets() -> dict[tuple[str, str], Validator]:
     for name in eval_planner.CASES:
         targets[("planner", name)] = lambda raw: eval_planner.validate(raw)
 
+    # supervisor 此前**完全没有登记**：它的用例既不在上面任何一张表里，
+    # 录制文件名又带着 rollout_ 前缀，于是被静默跳过。两处都已补上。
+    for name, case in eval_supervisor.CASES.items():
+        targets[("supervisor", name)] = lambda raw, c=case: eval_generic.validate_supervisor(raw, c)
+    # 同一份输入，消融实验把它叫「完整实例_同题」/「骨架示例_同题」
+    for alias, name in eval_supervisor.REPLAY_ALIASES.items():
+        case = eval_supervisor.CASES[name]
+        targets[("supervisor", alias)] = lambda raw, c=case: eval_generic.validate_supervisor(raw, c)
+
     return targets
 
 
@@ -161,6 +180,10 @@ def discover(runs_dir: Path) -> tuple[list[Recording], list[tuple[Path, str]]]:
             skipped.append((path, "文件名不含 _YYYYMMDD_HHMMSS 时间戳"))
             continue
         stem = m.group("stem")
+        kind = ""
+        head, _, rest = stem.partition("_")
+        if head in RUN_KINDS and rest:
+            kind, stem = head, rest
         role, _, case = stem.partition("_")
         if not case:
             skipped.append((path, f"文件名拆不出「角色_用例」：{stem}"))
@@ -169,6 +192,7 @@ def discover(runs_dir: Path) -> tuple[list[Recording], list[tuple[Path, str]]]:
             path, role, case,
             idx=int(m.group("idx")) if m.group("idx") else None,
             retried=m.group("retry") is not None,
+            kind=kind,
         ))
     return found, skipped
 
@@ -278,8 +302,8 @@ def report(
         print(f"\n【未登记：{len(unregistered)} 份没有对应用例，未参与回放】")
         agg: Counter[str] = Counter()
         for rec in unregistered:
-            agg[f"{rec.role}/{rec.case}"] += 1
-        roles = sorted({rec.role for rec in unregistered})
+            agg[rec.label] += 1
+        roles = sorted({rec.label.split("/")[0] for rec in unregistered})
         for label, n in sorted(agg.items()):
             print(f"  {n:>3} 份  {label}")
         print(f"  涉及前缀：{', '.join(roles)}")
