@@ -729,6 +729,54 @@ def test_every_student_level_has_a_branch_in_teacher():
     assert sorted(branches) == sorted(spec), f"档位 {branches} 与契约 {spec} 不一致"
 
 
+def test_teacher_material_is_a_answer_not_a_lesson():
+    """材料题角色交的是**答案**，不是教案——这是它存在的全部理由。
+
+    V2.0-说明 缺口 #1：阶段 3B 原先借 teacher，几轮真跑的输出都是讲解体
+    （`1.【本课目标】2.【知识讲解】…`），学生想比对答案却拿到一节课。
+    这条测试把「输出契约 = 审题 / 作答 / 回扣设问」钉死，防止有人图省事
+    把材料塞回 teacher 的 {{知识点}} 槽位。
+    """
+    prompt = lib.build("teacher_material", {}, fewshot=False)
+    for module in ("【审题】", "【作答】", "【回扣设问】"):
+        assert module in prompt, f"缺少模块 {module}"
+    # teacher 的教学模块名不得出现在**输出格式**里（只在禁令那条出现，见下）
+    assert "【本课目标】用一句话说明学完能掌握什么" not in prompt
+    assert "分步骤讲解" not in prompt
+    # 单点结构：结论 + 依据，且依据必须指回原文
+    assert "结论：" in prompt and "依据：" in prompt
+    assert "禁止输出【本课目标】" in prompt, "必须显式禁止输出教学模块"
+
+
+def test_teacher_material_keeps_material_and_question_apart():
+    """材料与设问必须是两个独立变量，不能再拼成一个内容槽位。
+
+    拼在一起的后果：模型分不清「要读的材料」与「要答的题」。
+    """
+    assert "知识点" not in lib.missing_vars("teacher_material", {})
+    prompt = lib.build("teacher_material", {
+        "学科": "初中语文", "学生水平": "基础",
+        "材料": "甲文：予独爱莲之出淤泥而不染。", "设问": "作者借莲寄托了什么？",
+    })
+    assert "材料：甲文：予独爱莲之出淤泥而不染。" in prompt
+    assert "设问：作者借莲寄托了什么？" in prompt
+    assert "{{" not in prompt, "变量填满后不应残留占位符"
+
+
+def test_every_student_level_has_a_branch_in_teacher_material():
+    """同上一条 teacher 的教训：取值域与分支必须一一对应。
+
+    「中等」曾只在契约取值域里、分支里不存在，传入后不命中任何分支且不报错。
+    """
+    spec = lib.input_spec("teacher_material")["学生水平"]["values"]
+    prompt = lib.build("teacher_material", {}, fewshot=False)
+    for level in spec:
+        assert f"{level}档：" in prompt, f"「{level}」缺少对应档位"
+    branches = re.findall(r"^([^\s：]+)档：", prompt, re.M)
+    assert sorted(branches) == sorted(spec), f"档位 {branches} 与契约 {spec} 不一致"
+    assert "3 个模块的名称、数量与顺序都不得改动" in prompt, "档位不得改动模块结构"
+
+
 # ---------------------------------------------------------- 生产代码闸门
 # 判定「生产文件」的方式是**默认生产、按名豁免**：新增一个 xxx_chain.py 会被
 # 自动当作生产代码检查，而不是静默逃过。豁免的只有：
@@ -1193,6 +1241,327 @@ def test_qa_validator_catches_answer_leak():
                                                 "链内": ["相反数"]}) if not ok]
     assert any("思路引导未给出结论" in f for f in failed), f"漏检：{failed}"
     assert not any("模块" in f for f in failed), "该样本结构是完整的，不应报模块问题"
+
+
+# ---------------------------------------------------------- 材料题示范作答校验
+
+MATERIAL_CASE = {
+    "材料": "【甲】予独爱莲之出淤泥而不染，濯清涟而不妖。（周敦颐《爱莲说》）",
+    "设问": "两则材料都写莲，作者借莲寄托了什么？请结合材料分点作答。",
+}
+
+MATERIAL_GOOD = (
+    "1. 【审题】设问动词是「概括」，限定范围是「结合材料」，因此只依据材料作答。\n"
+    "2. 【作答】\n   ① 结论：寄托了高洁的品格。\n"
+    "      依据：据材料甲「出淤泥而不染」。\n"
+    "   ② 结论：寄托了对君子品格的推崇。\n"
+    "      依据：据材料甲「濯清涟而不妖」。\n"
+    "3. 【回扣设问】作者借莲寄托的是高洁的品格与对君子的推崇。\n"
+)
+
+
+def test_material_validator_is_installed():
+    """合规样本全项通过；「有结论没依据」必须被检出。
+
+    材料题最容易走形的不是格式，而是**依据指不回材料**（看上去像答案，实际不可核对）。
+    """
+    from eval_generic import validate_material
+
+    assert all(ok for _, ok, _ in validate_material(MATERIAL_GOOD, MATERIAL_CASE))
+
+    # ① 把「依据」行拿掉 → 必须报「每点都有依据」
+    no_backing = MATERIAL_GOOD.replace("依据：", "说明：")
+    failed = [n for n, ok, _ in validate_material(no_backing, MATERIAL_CASE) if not ok]
+    assert any("每点都有「依据」" in f for f in failed), f"漏检：{failed}"
+
+    # ② 引文改字（材料里没有这句）→ 必须报「依据引用了材料原文」
+    wrong_quote = MATERIAL_GOOD.replace("「出淤泥而不染」", "「出淤泥土而不染」")
+    failed = [n for n, ok, _ in validate_material(wrong_quote, MATERIAL_CASE) if not ok]
+    assert any("依据引用了材料原文" in f for f in failed), f"漏检：{failed}"
+
+    # ③ 写回教案 → 必须报「未输出教学模块」（这正是缺口 #1 的形态）
+    as_lesson = "1. 【本课目标】学会答材料题\n2. 【知识讲解】\n" + MATERIAL_GOOD
+    failed = [n for n, ok, _ in validate_material(as_lesson, MATERIAL_CASE) if not ok]
+    assert any("未输出教学模块" in f for f in failed), f"漏检：{failed}"
+
+
+def test_material_quote_tolerates_merged_citations():
+    """合并引文不得误报：模型常把两处原文合并进一个「」里。
+
+    这条容错是必要的——过严的闸门比没有闸门更糟（回投也永远修不好）。
+    """
+    from eval_generic import quote_backed_by_material
+
+    assert quote_backed_by_material("出淤泥而不染、濯清涟而不妖", MATERIAL_CASE["材料"])
+    assert quote_backed_by_material("出淤泥而不染", MATERIAL_CASE["材料"])
+    assert not quote_backed_by_material("出淤泥土而不染", MATERIAL_CASE["材料"])
+    assert not quote_backed_by_material("清华大学的校训", MATERIAL_CASE["材料"])
+
+
+def test_material_split_points_handles_both_notations():
+    """作答点要同时认 ①②③ 与 1. / 1、 两种写法（模型两种都用）。"""
+    from eval_generic import split_points
+
+    assert len(split_points("① 结论：甲\n依据：「甲」\n② 结论：乙\n依据：「乙」")) == 2
+    assert len(split_points("1. 结论：甲\n2. 结论：乙\n3. 结论：丙")) == 3
+    assert split_points("结论：甲；依据：「甲」") == []
+
+
+def test_material_split_points_ignores_inline_circle_references():
+    """行内的 ①② 是**引用**前两点，不是新开两点。
+
+    这是个真缺陷：模型写「由①②得 2.4 N > 2.0 N」时，按字符切会凭空多切出一个作答点，
+    于是报出「第 4 点没有依据」这种假失败（实测一次真跑 14/14 → 12/14）。
+    """
+    from eval_generic import split_points
+
+    body = ("① 结论：甲\n依据：「甲」\n"
+            "② 结论：乙\n依据：由①②得 2 > 1。\n"
+            "③ 结论：丙\n依据：「丙」")
+    pts = split_points(body)
+    assert len(pts) == 3, f"行内引用被当成了新点：{len(pts)}"
+    assert "由①②得" in pts[1], "行内引用应留在它所属的那一点里"
+
+
+def test_material_contamination_wordlist_is_audited_both_ways():
+    """污染词表必须双向审计：在范文里（命得中）、又不在用例输入里（不误报）。
+
+    这是已修的真缺陷（「小明」事件）：只做单向审计时，用例输入自带的词会让
+    每一份正常输出都被判「照抄范文」。
+    """
+    import eval_material as EM
+    from eval_generic import MATERIAL_CONTAMINATION
+
+    fe = lib.fewshots["teacher_material"]["examples"]
+    blob = "".join(str(e["input"]) + str(e["output"]) for e in fe)
+    for tok in MATERIAL_CONTAMINATION:
+        assert tok in blob, f"污染词「{tok}」不在范文里，永远命不中"
+    for name, case in EM.CASES.items():
+        text = "".join(str(v) for v in case.values())
+        hit = [t for t in MATERIAL_CONTAMINATION if t in text]
+        assert not hit, f"用例 {name} 输入自带污染词 {hit}，必然误报"
+
+
+def test_material_eval_self_check_passes():
+    """材料题评测器的离线自检（范文 + 6 类注入 + 双向审计 + prompt 组装）必须全过。"""
+    import eval_material
+    eval_material.self_check(lib)
+
+
+# ---------------------------------------------------------- 作文构思校验
+
+def _outline_good() -> tuple[str, dict]:
+    """拿范文当「已知合规样本」——测试跟着范文走，不另抄一份。"""
+    import eval_outline as EO
+    _, case = EO.fewshot_cases()[0]
+    return case["_output"], case
+
+
+def test_teacher_outline_is_a_plan_not_a_lesson():
+    """构思角色交的是**方案**，不是教案——这是它存在的理由。
+
+    阶段 4A 原先借 teacher 渲染，真跑输出 1180 字符全是【本课目标】【知识讲解】…
+    还带「先问一句：…不能。」「通俗例子：…」这种讲解口吻。
+    """
+    prompt = lib.build("teacher_outline", {}, fewshot=False)
+    for module in ("【审题】", "【立意】", "【提纲】", "【素材】", "【首尾】"):
+        assert module in prompt, f"缺少模块 {module}"
+    for marker in ("反例：", "中心句：", "支撑：", "第N段", "素材N：", "开头：", "结尾："):
+        assert marker in prompt, f"输出格式里缺固定起头词 {marker}"
+    assert "【本课目标】用一句话说明学完能掌握什么" not in prompt
+    assert "分步骤讲解" not in prompt
+    assert "禁止输出【本课目标】" in prompt, "必须显式禁止输出教学模块"
+
+
+def test_teacher_outline_keeps_the_title_apart():
+    """作文题必须是独立变量，不能再拼成一段塞进 {{知识点}}。"""
+    assert "知识点" not in lib.missing_vars("teacher_outline", {})
+    prompt = lib.build("teacher_outline", {
+        "学科": "初中语文", "学生水平": "中等",
+        "题目": "以「这也是课堂」为题，写一篇记叙文",
+    })
+    assert "题目与要求：以「这也是课堂」为题，写一篇记叙文" in prompt
+    assert "{{" not in prompt, "变量填满后不应残留占位符"
+
+
+def test_every_student_level_has_a_branch_in_teacher_outline():
+    """同 teacher / teacher_material 的教训：取值域与分支必须一一对应。"""
+    spec = lib.input_spec("teacher_outline")["学生水平"]["values"]
+    prompt = lib.build("teacher_outline", {}, fewshot=False)
+    for level in spec:
+        assert f"{level}档：" in prompt, f"「{level}」缺少对应档位"
+    branches = re.findall(r"^([^\s：]+)档：", prompt, re.M)
+    assert sorted(branches) == sorted(spec), f"档位 {branches} 与契约 {spec} 不一致"
+    assert "5 个模块的名称、数量与顺序都不得改动" in prompt, "档位不得改动模块结构"
+
+
+def test_outline_validator_is_installed():
+    """合规样本全项通过；三类典型走形必须被检出。"""
+    from eval_generic import validate_outline
+
+    good, case = _outline_good()
+    assert all(ok for _, ok, _ in validate_outline(good, case, check_contamination=False))
+
+    # ① 立意骑墙 → 必须报「立意不骑墙」
+    fence = good.replace("中心句：长大不是学会做更多的事，而是第一次发现母亲也会累、也会需要人扶。",
+                         "中心句：快有快的好，慢有慢的好，各有各的道理。")
+    failed = [n for n, ok, _ in validate_outline(fence, case, check_contamination=False) if not ok]
+    assert any("立意不骑墙" in f for f in failed), f"漏检：{failed}"
+
+    # ② 提纲写成 6 段（凑数）→ 必须报「提纲为 3-5 段」
+    #    注意要插在【提纲】里：接在全文末尾会落到【首尾】模块，根本不算提纲段。
+    last = "第4段（合）：上楼时我走在她身后，第一次觉得她比我矮，回扣中心句。"
+    assert last in good, "范文结构已变，注入用例需同步"
+    six = good.replace(last, last + "\n   第5段（补）：补一段。\n   第6段（补）：再补一段。")
+    failed = [n for n, ok, _ in validate_outline(six, case, check_contamination=False) if not ok]
+    assert any("提纲为 3-5 段" in f for f in failed), f"漏检：{failed}"
+
+    # ③ 写回教案 → 必须报「未输出教学模块」
+    lesson = "1. 【本课目标】学会写记叙文\n2. 【知识讲解】\n" + good
+    failed = [n for n, ok, _ in validate_outline(lesson, case, check_contamination=False) if not ok]
+    assert any("未输出教学模块" in f for f in failed), f"漏检：{failed}"
+
+
+def test_outline_paragraphs_are_cut_by_line_start_marker():
+    """提纲按行首「第N段」切；行内出现的「第」不算（同材料题的圈号教训）。"""
+    from eval_generic import outline_paragraphs
+
+    body = ("第1段（起）：开头。\n   第2段（承）：中间。\n"
+            "   第3段（转）：转折——这里说的第 N 段只是行文里的引用。\n   第4段（合）：结尾。")
+    paras = outline_paragraphs(body)
+    assert len(paras) == 4, f"实际切出 {len(paras)} 段"
+    assert "第 N 段" in paras[2], "行内的「第」不得被当成分段标记"
+
+
+def test_outline_validator_checks_material_plan_coupling():
+    """素材不能只看「有没有写它证明」——它必须与提纲咬合。
+
+    这是把「它证明：」从形式断言变成实质断言的四处：
+      ① 每条素材要标明用在第 M 段；② M 必须是提纲里真实存在的段号；
+      ③ 标了「← 重点」的那段必须有素材；④ 「它证明」不得是把中心句抄一遍。
+    """
+    from eval_generic import validate_outline
+
+    good, case = _outline_good()
+    ok = lambda s: [n for n, o, _ in validate_outline(s, case, check_contamination=False) if not o]
+    mat1 = ("素材1：母亲把米袋从一只手换到另一只手、弯腰时晃了一下 —— "
+            "它证明：她确实累了，只是从不说。（用在第1段）")
+    assert mat1 in good
+
+    assert any("每条素材标注用在哪一段" in n for n in ok(good.replace("（用在第1段）", "")))
+    assert any("素材指向的段号存在" in n for n in ok(good.replace("（用在第3段）", "（用在第9段）")))
+    assert any("重点段有素材支撑" in n for n in ok(good.replace("（用在第3段）", "（用在第2段）")))
+    copied = good.replace("它证明：她确实累了，只是从不说。",
+                          "它证明：长大不是学会做更多的事，而是第一次发现母亲也会累、也会需要人扶。")
+    assert any("素材证明不是照抄中心句" in n for n in ok(copied))
+    # 敷衍几个字也要被拦（注意「（用在第M段）」不能拿来凑字数）
+    assert any("每条素材说明它证明什么" in n
+               for n in ok(good.replace("它证明：她确实累了，只是从不说。", "它证明：很好。")))
+
+
+def test_outline_prose_paragraph_detected_by_sentence_count_and_length():
+    """「提纲写成段落实文」用两个可稳健判定的信号：句数 > 2、或单段 > 120 字。
+
+    两者都不长但都能被拦下：一个是三句叙事，一个是逗号长句。
+    """
+    from eval_generic import validate_outline
+
+    good, case = _outline_good()
+    p2 = "第2段（承）：我想上前又不好意思，假装低头看手机，余光盯着她。"
+    assert p2 in good
+    ok = lambda s: [n for n, o, _ in validate_outline(s, case, check_contamination=False) if not o]
+
+    prose = good.replace(p2, "第2段（承）：我想上前又不好意思。我看见她手背上有几道口子。"
+                             "我站在原地没有动。")
+    assert any("提纲每段是一句话说明" in n for n in ok(prose)), "三句叙事未被拦下"
+    assert len(prose) < len(good) + 40, "这个样本字数并不长，靠字数卡是卡不住的"
+
+    long_one = good.replace(p2, "第2段（承）：" + "我想上前又不好意思，" * 20 + "。")
+    assert any("提纲每段是一句话说明" in n for n in ok(long_one)), "逗号长句未被拦下"
+
+
+def test_outline_quote_stripping_avoids_lecture_tone_false_positive():
+    """写在引号里的「先问一句」是修辞，不是讲课腔——`-n 5` 真跑暴露的第二处假红。
+
+    真样本（首轮被拦下的那两句，实为作文开头句）：
+      「当有人告诉你这道题有秒杀法时，先问一句：被省掉的，是重复劳动，还是必须自己走的那段路。」
+      「人人都想找捷径，但很少有人先问一句：我有没有走捷径的资格。」
+    而旧版 4A 真正的讲课腔是不带引号的（「先问一句：拿到《这也是课堂》，能不能……」），
+    所以判据是「剥掉「」引文后再扫」，真假两例都能分清。
+    """
+    from eval_generic import validate_outline
+
+    good, case = _outline_good()
+    ok = lambda s: [n for n, o, _ in validate_outline(s, case, check_contamination=False) if not o]
+
+    # ① 引号内的讲课词：不得被判成讲解口吻
+    quoted = good.replace(
+        "开头：「那袋米很沉，沉到我第一次意识到，母亲每天提回来的不只是米。」",
+        "开头：「人人都想找捷径，但很少有人先问一句：我有没有走捷径的资格。」")
+    assert quoted != good, "范文首尾已变，测试需同步"
+    assert not any("无讲解口吻" in n for n in ok(quoted)), "引号内的修辞被误判为讲课腔"
+
+    # ② 不带引号的讲课腔仍必须被抓
+    lecturing = good + "\n先问一句：拿到《这也是课堂》，能不能立刻写语文课上老师讲古诗？不能。"
+    assert any("无讲解口吻" in n for n in ok(lecturing)), "真正的讲课腔未被拦下"
+
+
+def test_outline_quotes_in_paragraph_are_not_treated_as_prose():
+    """提纲里给**题眼/主题词**加「」不算写成实文——这是 `-n 5` 真跑暴露的假红。
+
+    2026-10-01 拿 5 次采样跑，原先那条「不得含「」」拦下了 2/10 份，原句如：
+      「第4段（合）：……我明白了「不糊弄」是什么意思，回扣中心句。」
+      「第1段（总）：引出「捷径」话题，亮出中心句。」
+    包在「」里的是主题词，不是对白；而且回投后模型也删不掉（题眼就长那样），
+    属于「过严的闸门回投也修不好」。这两句已当回归样本钉在这里。
+    """
+    from eval_generic import validate_outline
+
+    good, case = _outline_good()
+    p2 = "第2段（承）：我想上前又不好意思，假装低头看手机，余光盯着她。"
+    real_samples = [
+        "第4段（合）：骑上车捏刹车的那一刻，我明白了「不糊弄」是什么意思，回扣中心句。",
+        "第1段（总）：由同学间流传的速成小册子引出「捷径」话题，亮出中心句。← 重点",
+    ]
+    for para in real_samples:
+        sample = good.replace(p2, "第2段（承）：我想上前又不好意思，假装低头看手机，余光盯着她。")
+        sample = sample.replace("第3段（转）：她弯腰时晃了一下，我一把接过米袋，她愣了一下，说我提不动。← 重点",
+                                para if "重点" in para else para)
+        failed = [n for n, o, _ in validate_outline(sample, case, check_contamination=False) if not o]
+        assert not any("提纲每段是一句话说明" in n for n in failed), \
+            f"带主题词引号的提纲被误判为实文：{para}"
+
+
+def test_outline_claim_strips_the_use_marker():
+    """量「它证明」的长度前必须先剔掉「（用在第M段）」，否则十几个字的后缀能凑够长度。"""
+    from eval_generic import _claim_of
+
+    item = "素材1：某个细节 —— 它证明：很好。（用在第1段）"
+    assert _claim_of(item) == "很好。", f"实际 {_claim_of(item)!r}"
+    assert _claim_of("素材1：某个细节 —— 它证明：她确实累了，只是从不说。（用在第1段）") \
+        == "她确实累了，只是从不说。"
+    assert _claim_of("素材1：某个细节，没写它证了啥") == ""
+
+
+def test_outline_contamination_wordlist_is_audited_both_ways():
+    """污染词表双向审计：在范文里（命得中）、又不在用例输入里（不误报）。"""
+    import eval_outline as EO
+    from eval_generic import OUTLINE_CONTAMINATION
+
+    fe = lib.fewshots["teacher_outline"]["examples"]
+    blob = "".join(str(e["input"]) + str(e["output"]) for e in fe)
+    for tok in OUTLINE_CONTAMINATION:
+        assert tok in blob, f"污染词「{tok}」不在范文里，永远命不中"
+    for name, case in EO.CASES.items():
+        text = "".join(str(v) for v in case.values())
+        hit = [t for t in OUTLINE_CONTAMINATION if t in text]
+        assert not hit, f"用例 {name} 输入自带污染词 {hit}，必然误报"
+
+
+def test_outline_eval_self_check_passes():
+    """构思评测器的离线自检（范文 + 8 类注入 + 双向审计 + prompt 组装）必须全过。"""
+    import eval_outline
+    eval_outline.self_check(lib)
 
 
 if __name__ == "__main__":
