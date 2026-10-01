@@ -1,0 +1,76 @@
+/* ─────────────────────────────────────────────────────────────────────
+ * auth.css — 注册 / 登录 split surface
+ * ─────────────────────────────────────────────────────────────────── */
+
+body.auth { background: var(--bg); }
+
+.auth-side {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  background:
+    radial-gradient(ellipse 76% 78% at 96% 42%, color-mix(in oklch, var(--accent) 27%, transparent), transparent 74%),
+    radial-gradient(ellipse 82% 62% at 78% 96%, color-mix(in oklch, var(--sky) 46%, transparent), transparent 76%),
+    var(--surface);
+  border-right: 1px solid var(--border);
+  padding: clamp(28px, 4vw, 56px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.auth-side .brand { padding: 0; }
+.auth-headline { margin-top: auto; }
+.auth-headline h1 { font-size: clamp(28px, 3.4vw, 44px); letter-spacing: -0.03em; }
+.auth-headline p { margin-top: var(--space-4); color: var(--muted); max-width: 40ch; line-height: 1.75; }
+
+.auth-facts { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-8); }
+.auth-fact { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-sm); color: var(--muted); }
+.auth-fact .k { font-family: var(--font-mono); font-size: 10px; color: var(--accent); border: 1px solid color-mix(in oklch, var(--accent) 40%, var(--border)); border-radius: var(--radius-sm); padding: 1px 5px; }
+
+/* 上下内边距从 24px 收到 8px：外层 .auth-side 的 flex gap 已经是 32px，
+   这 24px 是重复留白。不收也能用，但 1366×768 上左栏会 793 > 768
+   （换图前是 823，旧 SVG 是横幅构图、更高），收掉之后各档视口都不再出滚动条。 */
+.auth-mini { display: flex; justify-content: center; padding: var(--space-2) 0; }
+/* 换成位图后**按高度**定尺寸：原来的 SVG 是横幅构图（viewBox 220×200，
+   宽 210 时高 191），这张是竖构图（359×573）。继续按宽度定的话整列会被顶高。 */
+.auth-mini img { height: clamp(150px, 21vh, 205px); width: auto; }
+.auth-foot { font-family: var(--font-mono); font-size: 10px; color: var(--meta); letter-spacing: 0.08em; }
+
+.auth-main { display: flex; align-items: center; justify-content: center; padding: clamp(28px, 5vw, 72px) clamp(20px, 4vw, 64px); }
+.auth-card {
+  width: min(460px, 100%);
+  padding: clamp(24px, 3vw, 36px);
+  background: var(--bg);
+  border: 1px solid color-mix(in oklch, var(--accent) 24%, var(--border));
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 52px color-mix(in oklch, var(--accent) 8%, transparent);
+}
+.auth-card .tabs { margin-bottom: var(--space-6); }
+.auth-card h2 { font-size: var(--text-2xl); }
+.auth-card .sub { margin-top: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
+.auth-form { margin-top: var(--space-6); }
+.auth-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: end; }
+.auth-actions { margin-top: var(--space-6); display: flex; flex-direction: column; gap: var(--space-3); }
+.auth-alt { display: flex; align-items: center; justify-content: space-between; font-size: var(--text-sm); color: var(--muted); }
+.auth-alt button { border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 0; font-size: var(--text-sm); }
+.auth-alt button:hover { text-decoration: underline; }
+.auth-sep { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-5) 0; font-family: var(--font-mono); font-size: 10px; color: var(--meta); }
+.auth-sep::before, .auth-sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.auth-goals { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.auth-note { margin-top: var(--space-4); font-family: var(--font-mono); font-size: 10px; color: var(--meta); line-height: 1.7; }
+.auth-code-timer { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted); white-space: nowrap; padding-bottom: 12px; }
+
+@media (max-width: 900px) {
+  body.auth .shell-simple { grid-template-columns: minmax(0, 1fr); }
+  .auth-side {
+    position: static;
+    align-self: stretch;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    gap: var(--space-6);
+  }
+  .auth-mini { display: none; }
+  .auth-headline { margin-top: var(--space-4); }
+}
