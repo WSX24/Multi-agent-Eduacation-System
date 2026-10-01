@@ -1,0 +1,7 @@
+# main 的根 README 不被分支的 README 覆盖（合并时保留 main 的版本）。
+#
+# 生效前提：每台机器执行一次  git config merge.ours.driver true
+# 局限：merge 驱动只在「两边都改了同一文件」的冲突场景被调用；
+#       「一边删除、一边未改」属干净删除，不走驱动，挡不住删文件。
+#       真正可靠的是让两边内容一致（main 侧已恢复自己的 README）。
+README.md merge=ours
