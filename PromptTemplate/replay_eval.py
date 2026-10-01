@@ -123,6 +123,8 @@ def build_targets() -> dict[tuple[str, str], Validator]:
     import eval_assistant
     import eval_essay
     import eval_generic
+    import eval_material
+    import eval_outline
     import eval_planner
     import eval_qa
     import eval_sprint
@@ -144,6 +146,14 @@ def build_targets() -> dict[tuple[str, str], Validator]:
     essay_case = {"总分": eval_essay.TOTAL, "维度": eval_essay.DIMENSIONS}
     for name in eval_essay.CASES:
         targets[("essay", name)] = lambda raw, c=essay_case: eval_generic.validate_essay(raw, c)
+
+    # 材料题示范作答（teacher_material，10-01 新增）。录制文件名是 material_<用例>_…
+    for name, case in eval_material.CASES.items():
+        targets[("material", name)] = lambda raw, c=case: eval_generic.validate_material(raw, c)
+
+    # 作文构思（teacher_outline，10-01 新增）。录制文件名是 outline_<用例>_…
+    for name, case in eval_outline.CASES.items():
+        targets[("outline", name)] = lambda raw, c=case: eval_generic.validate_outline(raw, c)
 
     for name, case in eval_teacher.CASES.items():
         targets[("teacher", name)] = lambda raw, c=case: eval_teacher.validate(raw, c)
