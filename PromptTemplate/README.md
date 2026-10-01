@@ -124,6 +124,11 @@ python eval_outline.py -n 2                       # 真实模型评测：作文�
 python quality_gate.py                             # 照抄检测器自测
 ```
 
+> 🔗 **端到端示例**（把库接进真实链路：10 个阶段、闸门回投、token 记账、请求留痕）：
+> `../LangChain开发/PromotTemplate.py`。**没有 Key 也能先看请求体**：
+> `python PromotTemplate.py --dry-run` / `--cot-table`（客户端惰性创建，导入时不碰网络）。
+> 它**只随本分支发布**（演示/教学材料），不合并回 `main`。
+
 ## 三层验证（L1 / L2 / L3）
 
 每层能证明的东西不一样，**不能互相替代**：
