@@ -24,6 +24,7 @@ PromptTemplate/
 ├── eval_supervisor.py        # 督学评测器（数据不编造 / 任务量 / 不制造焦虑 / 复习依据）
 ├── eval_material.py          # 材料题示范作答评测器（结论必须有依据、依据得指回材料原文）
 ├── eval_outline.py           # 作文构思评测器（反例 / 不骑墙 / 提纲可执行 / 素材有落点）
+├── eval_levels.py            # 档位差分评测器：同题只改 {{学生水平}}，验五档分支真生效
 ├── eval_fewshot_variants.py  # Few-shot 变体对照实验
 ├── eval_skeleton_rollout.py  # 骨架示例 vs 完整实例对照实验
 ├── probe_same_topic.py       # 同题撞车探针（检测「换数字抄袭」）
@@ -120,7 +121,9 @@ python eval_supervisor.py -n 2                    # 真实模型评测：督学�
 python eval_material.py --self-check              # 离线检查材料题范文、6 类注入与校验器
 python eval_material.py -n 2                      # 真实模型评测：材料题作答（文理各一例）
 python eval_outline.py --self-check               # 离线检查构思范文、8 类注入与校验器
-python eval_outline.py -n 2                       # 真实模型评测：作文构思（记叙文 / 议论文）
+python eval_outline.py -n 2                       # 真实模型评测：作文构思（记叙文 / 议论文 / 材料作文）
+python eval_levels.py --self-check                # 离线：两个新角色 × 5 档的组装与档位断言
+python eval_levels.py -n 1 --retry 1               # 真实模型评测：五档差分（同题只改学生水平）
 python quality_gate.py                             # 照抄检测器自测
 ```
 

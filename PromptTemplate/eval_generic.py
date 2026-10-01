@@ -679,9 +679,14 @@ def validate_outline(raw: str, case: dict, *,
         f"写成了段落实文：{'；'.join(prose)}" if prose else "")
 
     # ---- 素材：条数、每条要真证明点什么、且与提纲咬合 ----
+    # 条数下限是**档位相关**的：模板「条件分支指令」里入门档明写「素材只给 1 个」
+    # （简化入门学生的负担），其余档位是「每个分论点/重点段 1 个」。
+    # 2026-10-01 档位差分真跑抳出来过：入门档被无条件断言判为不合格——
+    # 模板与断言打架时，以模板声明的契约为准，断言按档位放行。
     mat = bodies["素材"]
     items = outline_material_items(mat)
-    add("素材至少 2 条", len(items) >= 2, f"实际 {len(items)} 条")
+    min_items = 1 if case.get("学生水平") == "入门" else 2
+    add(f"素材至少 {min_items} 条", len(items) >= min_items, f"实际 {len(items)} 条")
 
     thin = [i for i, it in enumerate(items, 1) if len(_claim_of(it)) < OUTLINE_CLAIM_MIN]
     add(f"每条素材说明它证明什么(≥{OUTLINE_CLAIM_MIN}字)", not thin,

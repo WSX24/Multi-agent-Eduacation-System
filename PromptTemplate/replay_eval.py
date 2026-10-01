@@ -124,6 +124,7 @@ def build_targets() -> dict[tuple[str, str], Validator]:
     import eval_essay
     import eval_generic
     import eval_material
+    import eval_levels
     import eval_outline
     import eval_planner
     import eval_qa
@@ -154,6 +155,14 @@ def build_targets() -> dict[tuple[str, str], Validator]:
     # 作文构思（teacher_outline，10-01 新增）。录制文件名是 outline_<用例>_…
     for name, case in eval_outline.CASES.items():
         targets[("outline", name)] = lambda raw, c=case: eval_generic.validate_outline(raw, c)
+
+    # 档位差分（eval_levels）。录制名是 levels_<角色>_<档位>_…，
+    # 角色位会被切成 "levels"、用例位是 "<角色>_<档位>"，逐一对上。
+    for lv_role, lv_spec in eval_levels.ROLES.items():
+        for band in eval_levels.BANDS:
+            targets[("levels", f"{lv_role}_{band}")] = (
+                lambda raw, r=lv_role, b=band:
+                    eval_levels.structural(raw, r, b) + eval_levels.band_checks(raw, r, b))
 
     for name, case in eval_teacher.CASES.items():
         targets[("teacher", name)] = lambda raw, c=case: eval_teacher.validate(raw, c)

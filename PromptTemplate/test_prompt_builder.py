@@ -1564,6 +1564,38 @@ def test_outline_eval_self_check_passes():
     eval_outline.self_check(lib)
 
 
+def test_levels_eval_self_check_passes():
+    """档位差分评测器的离线自检：五档组装 + 断言表覆盖所有档 + 差分对不漏档。"""
+    import eval_levels
+    eval_levels.self_check(lib)
+
+
+def test_levels_covers_every_declared_band():
+    """契约取值域里的每一档都必须有差分断言位，否则“跑分档”会漏一档而无人发现。
+
+    这正是 teacher 当年的缺陷形态：取值域里有「中等」、分支里没有，传入后
+    不命中任何档位也不报错。
+    """
+    import eval_levels
+    for role, spec in eval_levels.ROLES.items():
+        decl = lib.input_spec(spec["template"])["学生水平"]["values"]
+        assert list(eval_levels.BANDS) == decl, f"{role} 的档位顺序/取值与契约不一致：{decl}"
+        assert set(spec["band_check"]) == set(decl), f"{role} 的档位断言缺项"
+        covered = {b for pair in eval_levels.band_pairs() for b in pair}
+        assert covered == set(decl), f"{role} 的差分对漏档：{set(decl) - covered}"
+
+
+def test_material_and_outline_have_three_cases_each():
+    """用例面：两个角色各要含换个学科/命题方式的第三例（只验一例会把“用例面窄”留在原地）。"""
+    import eval_material
+    import eval_outline
+
+    assert len(eval_material.CASES) >= 3
+    assert len(eval_outline.CASES) >= 3
+    assert any("历史" in c["学科"] for c in eval_material.CASES.values()), "材料题缺历史用例"
+    assert any("自拟题目" in c["题目"] for c in eval_outline.CASES.values()), "构思缺自拟题目用例"
+
+
 if __name__ == "__main__":
     main()
 
