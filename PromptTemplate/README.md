@@ -22,6 +22,8 @@ PromptTemplate/
 ├── eval_generic.py           # 通用结构校验 + 输出契约（运行时也用它）
 ├── eval_essay.py             # 作文/主观题批改评测器（分维度评分 + 判分分辨力）
 ├── eval_supervisor.py        # 督学评测器（数据不编造 / 任务量 / 不制造焦虑 / 复习依据）
+├── eval_material.py          # 材料题示范作答评测器（结论必须有依据、依据得指回材料原文）
+├── eval_outline.py           # 作文构思评测器（反例 / 不骑墙 / 提纲可执行 / 素材有落点）
 ├── eval_fewshot_variants.py  # Few-shot 变体对照实验
 ├── eval_skeleton_rollout.py  # 骨架示例 vs 完整实例对照实验
 ├── probe_same_topic.py       # 同题撞车探针（检测「换数字抄袭」）
@@ -36,6 +38,8 @@ PromptTemplate/
 │   └── system_base.yaml      # 已归档：通用骨架 + 设计四原则（旧 system 结构样本）
 ├── templates/                # 角色模板本体（每角色一个 YAML）
 │   ├── teacher.yaml          # 教师 Agent · 讲授者（单次讲解，带水平分支）
+│   ├── teacher_material.yaml # 教师 Agent · 材料题示范作答者（结论 + 依据的分点作答）
+│   ├── teacher_outline.yaml  # 教师 Agent · 作文构思示范者（中心句 + 提纲 + 素材）
 │   ├── teacher_planner.yaml  # 教师 Agent · 学习方案规划者（长周期大纲 + 门控）
 │   ├── teacher_unit.yaml     # 教师 Agent · 单元渲染者（按需生成单个单元）
 │   ├── teacher_sprint.yaml   # 教师 Agent · 短周期速成（一次性交付）
@@ -45,6 +49,8 @@ PromptTemplate/
 │   └── qa.yaml               # 答疑 Agent · 解答者（扩展）
 ├── fewshots/                 # Few-shot 示例（与模板分离，按需拼接）
 │   ├── teacher.yaml          # 含数学 2 例 + 语文 1 例（文科风格锚定）
+│   ├── teacher_material.yaml # 文理各 1 例（地理「结合所学」/ 生物实验「根据材料」）
+│   ├── teacher_outline.yaml  # 文体各 1 例（记叙文起承转合 / 议论文总分总）
 │   ├── teacher_planner.yaml
 │   ├── teacher_sprint.yaml
 │   ├── assistant.yaml
@@ -111,8 +117,17 @@ python eval_qa.py --self-check                    # 离线检查答疑范文与�
 python eval_qa.py -n 2                            # 真实模型评测：答疑（引导不喂答案）
 python eval_supervisor.py --self-check            # 离线检查督学范文、词表双向审计与校验器
 python eval_supervisor.py -n 2                    # 真实模型评测：督学（不焦虑 / 任务量 / 复习依据）
+python eval_material.py --self-check              # 离线检查材料题范文、6 类注入与校验器
+python eval_material.py -n 2                      # 真实模型评测：材料题作答（文理各一例）
+python eval_outline.py --self-check               # 离线检查构思范文、8 类注入与校验器
+python eval_outline.py -n 2                       # 真实模型评测：作文构思（记叙文 / 议论文）
 python quality_gate.py                             # 照抄检测器自测
 ```
+
+> 🔗 **端到端示例**（把库接进真实链路：10 个阶段、闸门回投、token 记账、请求留痕）：
+> `../LangChain开发/PromotTemplate.py`。**没有 Key 也能先看请求体**：
+> `python PromotTemplate.py --dry-run` / `--cot-table`（客户端惰性创建，导入时不碰网络）。
+> 它**只随本分支发布**（演示/教学材料），不合并回 `main`。
 
 ## 三层验证（L1 / L2 / L3）
 
@@ -142,6 +157,11 @@ python replay_eval.py --selftest  # 注入已知缺陷，验证它抓得住（�
 python replay_eval.py --write-baseline eval_baseline.txt
 python replay_eval.py --expect eval_baseline.txt --strict
 ```
+
+> 📼 **录制命名约定**：评测器**每次尝试都落盘**——首轮不带后缀，重试成功那版带 `_r1`/`_r2`。
+> 所以 `eval_runs/` 里会同时有「首轮（被闸门拦下）」与「修正版」两份；`superseded()` 会把前一份
+> 排除在基线之外（它按设计就是不合格的），但保留在目录里——这样闸门**每次干预都可复核**。
+> 早先的实现是「重试成功才落盘」，代价是首轮原文不留痕，只看最终结果会把闸门干了什么吞掉。
 
 **它抓什么、抓不到什么**（先看这条，否则会拿到假安全感）：
 
@@ -540,7 +560,7 @@ lib.build(role, variables=None, fewshot=True, cot=None, fewshot_count=None) -> s
 
 | 参数 | 说明 |
 |------|------|
-| `role` | 模板名：`teacher` / `teacher_planner` / `teacher_unit` / `teacher_sprint` / `assistant` / `assistant_essay` / `supervisor` / `qa` |
+| `role` | 模板名：`teacher` / `teacher_planner` / `teacher_unit` / `teacher_material` / `teacher_outline` / `teacher_sprint` / `assistant` / `assistant_essay` / `supervisor` / `qa` |
 | `variables` | 变量字典，填充 `{{占位符}}`（未提供的变量会原样保留，便于自查） |
 | `fewshot` | `False` 不加示例；`True` 自动用同名 fewshot；传字符串指定其它 fewshot（如 `"teacher"`） |
 | `cot` | CoT 片段名（见下表）；`None` 不加 |
@@ -561,12 +581,20 @@ lib.build(role, variables=None, fewshot=True, cot=None, fewshot_count=None) -> s
 | `self_check_humanities` | 文科 | 回文检查 / 回问检查 / 落地检查 / 体例检查 |
 | `fewshot_count` | 最多拼接几个示例 |
 
+> **接在哪**（片段不是摆设，每个都有阶段在用）：`math_steps` 理科讲解、`text_reading` 文科讲解、
+> `self_check` / `self_check_humanities` 批改自查、`source_analysis` 材料题（端到端示范的阶段 3B）、
+> `essay_outline` 写作构思（阶段 4A）、`zero_shot` 是通用兜底（有专用片段时刻意不用）。
+> 材料题与写作构思这两个片段在 2026-09-30 之前是“备而未接”（无任何阶段挂它），现已在
+> 示范流程里真实生效。
+
 辅助方法：`list_roles()` / `list_fewshots()` / `list_cot()` / `missing_vars(role, variables)`。
 
 ## 教师 Agent 的三种任务模式
 
 教师 Agent 不是单一角色，而是三个可独立调用的任务模式。**核心是「规划」与「渲染」分离**：
 长周期任务先出骨架，单元解锁时才按需生成内容，避免方案微调导致已生成内容作废。
+表末三行是同一 Agent 的另三种产出形态（单次讲授 / 材料题示范作答 / 作文构思）——
+它们与 M1-M3 的关键差别在**输出契约**：交的是「课」、「答案」，还是「写作方案」。
 
 | 模式 | 模板名 | 触发时机 | 产出 | 关键约束 |
 |------|--------|---------|------|---------|
@@ -574,6 +602,8 @@ lib.build(role, variables=None, fewshot=True, cot=None, fewshot_count=None) -> s
 | M2 单元渲染 | `teacher_unit` | 每章解锁后 | 单单元讲解 + 课件大纲 + 作业 | 一次只渲染一个单元，依学情调难度 |
 | M3 短周期速成 | `teacher_sprint` | 即时 | 方案 + 内容 + 结束测验，一把出 | 无复习、无门控、一次性 |
 | （单次讲授） | `teacher` | 无课程上下文时 | 5 模块知识讲解 | 按 `{{学生水平}}` 分支 |
+| （材料题示范作答） | `teacher_material` | 学生做材料题时 | 「审题 / 作答 / 回扣设问」三段，作答点写成「结论 + 依据」 | 每个作答点必须带「依据：」行，且依据要能指回材料原文；**禁止**输出教学模块 |
+| （作文构思） | `teacher_outline` | 学生要写作文时 | 「审题 / 立意 / 提纲 / 素材 / 首尾」，提纲 3-5 段且标重点 | 立意不得骑墙；提纲不得写成段落实文；素材必须说明「它证明」什么；**禁止**输出教学模块 |
 
 ### 两段式渲染与门控
 
@@ -662,7 +692,7 @@ sprint = lib.build("teacher_sprint", {
 
 | 占位符 | 含义 | 示例 | 出现于 |
 |--------|------|------|--------|
-| `{{学科}}` | 学科名称 | 初中数学 | teacher / assistant / qa |
+| `{{学科}}` | 学科名称 | 初中数学 | teacher / teacher_material / assistant / qa |
 | `{{知识点}}` | 当前知识点 | 一元二次方程 | teacher |
 | `{{学生水平}}` | 学生能力分层 | 入门 / 基础 / 中等 / 进阶 / 竞赛 | 全部角色 |
 | `{{学生姓名}}` | 学生昵称 | 小明 | assistant / supervisor |
@@ -670,11 +700,13 @@ sprint = lib.build("teacher_sprint", {
 | `{{学生答案}}` | 学生作答 | … | assistant |
 | `{{参考答案}}` | 标准答案 | … | assistant |
 | `{{本题满分}}` | 本题分值——【得分】分母的唯一来源，禁止模型自编 | 5 | assistant |
-| `{{题目}}` | 作文/主观题的题目与要求 | 以「慢下来」为题写一篇文章 | assistant_essay |
+| `{{题目}}` | 作文/主观题的题目与要求 | 以「慢下来」为题写一篇文章 | assistant_essay / teacher_outline |
 | `{{学生作文}}` | 学生本次作文或主观题作答原文 | … | assistant_essay |
 | `{{评分维度}}` | 分维度与各自满分——【维度得分】各维分母的唯一来源 | 立意与思想 10、结构与条理 10 | assistant_essay |
 | `{{总分}}` | 作文总分——【总分】分母的唯一来源 | 40 | assistant_essay |
 | `{{字数要求}}` | 题目要求的字数（不评字数时传「无」） | 不少于 600 字 | assistant_essay |
+| `{{材料}}` | 材料题的材料原文（文本或实验数据）——与 `{{设问}}` **刻意分开**，拼成一个槽位会让模型分不清「要读的材料」与「要答的题」 | 予独爱莲之出淤泥而不染…… | teacher_material |
+| `{{设问}}` | 材料题的设问原文，动词与限定范围决定要不要补背景知识 | 结合材料与所学，分析……的原因 | teacher_material |
 | `{{学习数据}}` | 行为数据摘要 | 本周做题 45 道，正确率 62% | supervisor |
 | `{{薄弱点}}` / `{{薄弱点候选列表}}` | 薄弱知识点列表 | 因式分解、二次函数 | assistant |
 | `{{待复习知识点}}` | 待复习内容 | 整式乘法 | supervisor |
