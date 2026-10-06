@@ -1,0 +1,15 @@
+# Python cache and virtual environment
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local development data and secrets
+db.sqlite3
+.env
+.dev-secret-key
+
+# Test and coverage output
+.pytest_cache/
+.coverage
+htmlcov/

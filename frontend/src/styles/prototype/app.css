@@ -25,6 +25,7 @@
   border-right: 1px solid var(--border);
   z-index: 40;
 }
+.app-logout { width: 100%; margin-top: var(--space-3); }
 .brand { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-2); }
 .brand-mark {
   width: 34px; height: 34px; flex: none;

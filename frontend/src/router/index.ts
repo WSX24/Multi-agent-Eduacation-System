@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { loadCurrentUser } from '../api/accounts'
 import AppShell from '../components/AppShell.vue'
 import AuthView from '../views/AuthView.vue'
 import CourseDetailView from '../views/CourseDetailView.vue'
@@ -64,6 +65,16 @@ const router = createRouter({
     if (to.hash) return { el: to.hash, behavior: 'smooth' }
     return { top: 0 }
   },
+})
+
+router.beforeEach(async (to) => {
+  if (!to.path.startsWith('/app')) return true
+  try {
+    if (await loadCurrentUser()) return true
+  } catch {
+    // Keep the tokens so a temporary server outage does not discard a session.
+  }
+  return { name: 'auth', query: { redirect: to.fullPath } }
 })
 
 export default router

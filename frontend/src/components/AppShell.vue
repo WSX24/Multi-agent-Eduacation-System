@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { currentUser, logoutAccount } from '../api/accounts'
 
 const route = useRoute()
+const router = useRouter()
 const isNavOpen = ref(false)
 const pageTitle = computed(() => String(route.meta.title ?? '工作区'))
 const isCoursesSection = computed(() => route.name === 'app-courses' || route.name === 'app-course-detail' || route.name === 'app-lesson')
@@ -13,6 +15,15 @@ const closeOnEscape = (event: KeyboardEvent) => {
 
 onMounted(() => window.addEventListener('keydown', closeOnEscape))
 onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape))
+
+async function signOut() {
+  try {
+    await logoutAccount()
+  } catch {
+    // Local tokens are cleared even if the backend is temporarily unreachable.
+  }
+  await router.replace({ name: 'auth' })
+}
 </script>
 
 <template>
@@ -47,12 +58,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape))
 
       <div class="side-foot">
         <div class="side-user">
-          <span class="avatar avatar--accent" aria-hidden="true">小T</span>
+          <span class="avatar avatar--accent" aria-hidden="true">{{ currentUser?.email.slice(0, 1).toUpperCase() ?? '用' }}</span>
           <span class="side-user-copy">
-            <span>演示账号</span>
-            <span class="caption">本地前端预览</span>
+            <span>{{ currentUser?.email ?? '当前用户' }}</span>
+            <span class="caption">已登录</span>
           </span>
         </div>
+        <button class="btn app-logout" type="button" @click="signOut">退出登录</button>
       </div>
     </aside>
 

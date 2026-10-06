@@ -4,6 +4,8 @@ import botanyMarkup from '../assets/landing-botany.html?raw'
 import { useLandingMotion } from '../composables/useLandingMotion'
 
 const { film, filmFrame, video, botanyHost, isStatic } = useLandingMotion()
+// These bindings are populated by the matching static template refs below.
+void [film, filmFrame, video, botanyHost]
 
 const agents = [
   {
