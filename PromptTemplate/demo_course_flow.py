@@ -22,6 +22,7 @@ from pathlib import Path
 
 import yaml
 
+from eval_generic import split_by_names
 from prompt_builder import PromptLib
 from quality_gate import require_inputs
 
@@ -204,6 +205,48 @@ def build_planner_prompt(lib: PromptLib, variables: dict) -> str:
     return lib.build("teacher_planner", variables)
 
 
+# --------------------------------------------------- M2 结果 → PPT 变量组装
+# 单元输出 → PPT 输入：筛选 5 个教学内容模块 + 带上【课件大纲】作页骨架参照。
+# 逻辑在 unit_bridge.py（pipeline.py 的 --unit-file 也复用它，保证两边一致）。
+from unit_bridge import (UNIT_ALL_SECTIONS, UNIT_TO_PPT_SECTIONS,   # noqa: E402,F401
+                         unit_output_to_ppt_content)
+
+
+def build_ppt_prompt(
+    lib: PromptLib,
+    unit_output: str,
+    course: dict,
+    chapter_id: str,
+    unit_index: int,
+    page_count: int = 10,
+) -> str:
+    """把 ``teacher_unit`` 的渲染结果组织成 ``teacher_ppt`` 的输入。
+
+    unit_output:
+        ``teacher_unit`` 的完整输出文本（含【本课目标】【知识讲解】等模块）。
+    course / chapter_id / unit_index:
+        蓝图与其定位，用于取回单元标题、学科、学生水平等元数据。
+
+    设计要点：PPT 角色有两种用法——不传单元内容时从零制作，传了单元内容时
+    **只做「内容 → 页面」的重新组织**。本函数对应后者：把 unit 渲染出来的
+    教学内容作为「单元内容」喂进去，PPT 不重讲、不编造；
+    并把 unit 的【课件大纲】作为「页骨架参照」一起带上，让 PPT 参照单元自己的分页。
+    """
+    content = unit_output_to_ppt_content(unit_output)
+
+    meta = course.get("course", {})
+    unit = _chapter(course, chapter_id)["units"][unit_index]
+    variables = {
+        "学科": meta.get("subject", ""),
+        "课件主题": unit["title"],
+        "页数要求": str(page_count),
+        "学生水平": meta.get("student_level", "基础"),
+        "单元内容": content,
+    }
+    require_inputs(lib, "teacher_ppt", variables)
+    return lib.build("teacher_ppt", variables)
+
+
 def next_unlocked_unit(course: dict, progress: dict) -> tuple[str, int] | None:
     """找出下一章待渲染的单元（该章已解锁且尚未生成内容）。"""
     for ch in course["chapters"]:
@@ -273,8 +316,32 @@ def main() -> None:
     unit_prompt = build_unit_prompt(lib, course, chapter_id, idx, progress)
     head = unit_prompt[:unit_prompt.index("【难度自适应规则】")]
     print(head)
-    print("...（后略：难度自适应规则 / 输出格式 / 输出纪律 + teacher Few-shot）")
+    print("...（后略：难度自适应规则 / 输出格式 / 输出纪律）")
     print(f"\nunit prompt: {len(unit_prompt)} 字符")
+
+    print()
+    print("=" * 72)
+    print("M2 结果 → PPT：把单元渲染结果组织成 PPT 课件大纲")
+    print("=" * 72)
+    # 模拟 teacher_unit 的一次渲染输出（真实链路里这里是 LLM 的返回）
+    # 注意：这里的学科/主题必须与蓝图里的第一个单元一致（初中生物·光合作用），
+    # 否则会演示出「课件主题是生物、单元内容却是数学」的自相矛盾。
+    fake_unit_output = """\
+1. 【本单元定位】第1章第1单元，本章共2个单元，首章
+2. 【难度调整说明】首章无前置数据，按蓝图难度输出，未做调整
+3. 【本课目标】掌握光合作用的物质与能量转化过程
+4. 【知识讲解】光合作用是绿色植物利用光能，把二氧化碳和水合成有机物并释放氧气的过程；光能转化为化学能储存在有机物中。
+5. 【典型例题】在阳光下，一片叶子的叶绿体把二氧化碳和水合成葡萄糖并释放氧气。问：光能最终转化成了什么？答：转化为储存在有机物中的化学能。
+6. 【易错提醒】光合作用的原料是二氧化碳和水，产物是有机物和氧气；很多同学把「光能」当成原料，那是错的。
+7. 【小结】光合作用把光能转化为化学能，原料是二氧化碳和水，产物是有机物和氧气。
+8. 【课件大纲】P1 光合作用 — 原料与产物
+9. 【单元作业】3 题（略）
+10.【完成后解锁】第1章测验"""
+    ppt_prompt = build_ppt_prompt(lib, fake_unit_output, course, chapter_id, idx)
+    print("已从 unit 输出中提取 5 个教学模块（本课目标/知识讲解/典型例题/易错提醒/小结）")
+    print("丢弃 5 个管理模块（本单元定位/难度调整说明/课件大纲/单元作业/完成后解锁）\n")
+    print(ppt_prompt)
+    print(f"\nppt prompt: {len(ppt_prompt)} 字符")
 
 
 if __name__ == "__main__":

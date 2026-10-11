@@ -48,3 +48,15 @@ _rag_index/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ── PPT-Agent / skill 的历史产物（体积大，不入仓）──
+PPT-Agent/runs/
+PPT-Agent/__pycache__/
+ppt-master/skills/ppt-master/projects/
+
+# ── 产物 / 大文件 / 第三方仓库（不入本仓）──
+PPT-Agent/deliver/
+*.pptx
+*.docx
+ppt-master/
+.agents/

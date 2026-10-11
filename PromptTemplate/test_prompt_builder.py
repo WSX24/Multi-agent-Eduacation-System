@@ -9,10 +9,12 @@ from pathlib import Path
 import re
 import yaml
 
-from demo_course_flow import (build_planner_prompt, build_unit_prompt, can_unlock,
-                              parse_blueprint, unit_variables)
-from eval_generic import (ESSAY_SECTIONS, SUPERVISOR_SECTIONS, count_task_items,
-                          validate_essay, validate_qa, validate_supervisor)
+from demo_course_flow import (build_planner_prompt, build_ppt_prompt, build_unit_prompt,
+                              can_unlock, parse_blueprint, unit_variables)
+from eval_generic import (ESSAY_SECTIONS, PPT_GENERAL_CONTAMINATION,
+                          PPT_GENERAL_SECTIONS, PPT_SECTIONS, SUPERVISOR_SECTIONS,
+                          count_task_items, validate_essay, validate_ppt,
+                          validate_ppt_general, validate_qa, validate_supervisor)
 from eval_unit import split_sections, validate as validate_unit
 from eval_sprint import count_duration_hours, split_sections as split_sprint_sections, validate as validate_sprint
 from prompt_builder import PromptLib
@@ -85,6 +87,188 @@ def test_new_teacher_modes_build():
     assert "【核心原则】" in lib.build("teacher_planner", {}, fewshot=False)
     assert "【难度自适应规则】" in lib.build("teacher_unit", {}, fewshot=False)
     assert "【速成目标】" in lib.build("teacher_sprint", {}, fewshot=False)
+
+
+def test_ppt_role_build():
+    """PPT 课件角色（teacher_ppt）可独立构建，变量填满后无残留占位符。"""
+    prompt = lib.build("teacher_ppt", {
+        "学科": "初中数学", "课件主题": "勾股定理",
+        "页数要求": "8", "学生水平": "基础", "单元内容": "无",
+    }, fewshot=False)
+    assert "【课件主题】" in prompt
+    assert "【整体结构】" in prompt
+    assert "【逐页大纲】" in prompt
+    assert "【视觉建议】" in prompt
+    assert "{{" not in prompt, "变量填满后不应残留占位符"
+
+
+def test_build_ppt_prompt_extracts_unit_sections():
+    """build_ppt_prompt 应从 unit 输出提取 5 个教学模块，丢弃管理模块。"""
+    course = _course()
+    unit_output = (
+        "1. 【本单元定位】第1章第1单元\n"
+        "2. 【难度调整说明】首章无数据\n"
+        "3. 【本课目标】掌握光合作用\n"
+        "4. 【知识讲解】光能转化学能\n"
+        "5. 【典型例题】二氧化碳变葡萄糖\n"
+        "6. 【易错提醒】别把光能当原料\n"
+        "7. 【小结】原料与产物\n"
+        "8. 【课件大纲】P1 光合作用\n"
+        "9. 【单元作业】3 题\n"
+        "10.【完成后解锁】第1章测验"
+    )
+    prompt = build_ppt_prompt(lib, unit_output, course, course["chapters"][0]["id"], 0)
+    assert "本课目标" in prompt and "知识讲解" in prompt and "典型例题" in prompt
+    assert "单元作业" not in prompt, "管理模块（单元作业）不应进入 PPT prompt"
+    assert "完成后解锁" not in prompt, "管理模块（完成后解锁）不应进入 PPT prompt"
+    assert "{{" not in prompt, "变量填满后不应残留占位符"
+
+
+def test_ppt_fewshot_passes_own_validator():
+    """PPT 角色的范文必须通过它自己的校验器（否则等于教模型写错）。
+
+    关键：必须把**输入里的 case 一并传进去**。不传 case，档位落地与
+    「课件主题沿用输入」这两类断言根本不会跑。真实教训——
+    「中等档要每页补『可能的提问』」这条规则原本只写在提示词里，而范文2
+    声明了中等档却一个字都没补；旧测试不传 case，所以谁都没发现。
+    """
+    import yaml
+
+    data = yaml.safe_load(
+        (ROOT / "fewshots" / "teacher_ppt.yaml").read_text(encoding="utf-8")
+    )
+    assert data["name"] == "teacher_ppt"
+    for ex in data["examples"]:
+        fields = _parse_example_input(ex["input"])
+        case = {k: fields[k] for k in ("课件主题", "页数要求", "学生水平")}
+        failed = [n for n, ok, _ in validate_ppt(
+            ex["output"], case, check_contamination=False) if not ok]
+        assert not failed, f"PPT 范文未通过自身校验：{failed}"
+    assert PPT_SECTIONS == ["课件主题", "整体结构", "逐页大纲", "视觉建议"]
+
+
+def test_ppt_structure_and_band_enforced():
+    """结构骨架与档位落地必须可被程序化检出（课件角色的两条核心约束）。
+
+    这两条曾经都只是提示词里的**请求**：结构骨架用 any(…"→") 就能骗过，
+    而学生水平档位压根没有断言。这里逐条把「漏做」注入进去，验证检得出。
+    """
+    import yaml
+
+    data = yaml.safe_load(
+        (ROOT / "fewshots" / "teacher_ppt.yaml").read_text(encoding="utf-8")
+    )
+    fields = _parse_example_input(data["examples"][1]["input"])
+    base = data["examples"][1]["output"]
+    case = {k: fields[k] for k in ("课件主题", "页数要求", "学生水平")}
+    assert case["学生水平"] == "中等", f"基准范文应取中等档，实得 {case['学生水平']}"
+
+    def failed_of(sample, c):
+        return [n for n, ok, _ in validate_ppt(
+            sample, c, check_contamination=False) if not ok]
+
+    # ① 结构骨架：整体结构换成不是导入→展开→小结的骨架，必须检出
+    tampered = re.sub(
+        r"2\. 【整体结构】[^\n]*",
+        "2. 【整体结构】三部分：背景 → 内容 → 结论。逻辑线：先背景、再内容。",
+        base)
+    got = failed_of(tampered, case)
+    assert any("整体结构落地" in n for n in got), f"结构骨架丢失未被检出：{got}"
+
+    # ② 中等档：抽掉「可能的提问」，必须逐页检出（范文2 曾经的违规）
+    got = failed_of(base.replace("可能的提问", "课后想一想"), case)
+    assert any("中等档" in n for n in got), f"中等档痕迹丢失未被检出：{got}"
+
+    # ③ 同一份范文按入门档看：有 3 条要点的页，必须检出
+    got = failed_of(base, {**case, "学生水平": "入门"})
+    assert any("入门档" in n for n in got), f"入门档要点超量未被检出：{got}"
+
+    # ④ 同一份范文按竞赛档看：没有挑战页，必须检出
+    got = failed_of(base, {**case, "学生水平": "竞赛"})
+    assert any("竞赛档" in n for n in got), f"竞赛档缺挑战页未被检出：{got}"
+
+    # ⑤ 前提：范文必须在**它自己的档位**下满分，否则上面四条是拿坏样本做基准
+    got = failed_of(base, case)
+    assert not got, f"中等档范文自身不达标：{got}"
+
+
+def test_ppt_page_count_input_is_validated():
+    """页数要求是 number（min 8 / max 30），越界应在入口预检被拦下。"""
+    bad = lib.invalid_inputs("teacher_ppt", {"页数要求": "100", "学生水平": "基础"})
+    assert any(p.name == "页数要求" for p in bad), f"越界页数未被拦下：{bad}"
+
+
+def _parse_example_input(text: str) -> dict:
+    """从范文的【示例输入】里解析出字段（标签：值，一行一个）。
+
+    teacher_ppt 与 ppt_general 的示例输入都是这个「标签：值」格式，
+    所以两个角色的测试共用这一份解析，别各写一份。
+    """
+    out = {}
+    for line in text.splitlines():
+        if "：" in line:
+            k, v = line.split("：", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def test_ppt_general_role_build():
+    """通用 PPT 角色（ppt_general）可独立构建，变量填满后无残留占位符。"""
+    prompt = lib.build("ppt_general", {
+        "主题": "某产品年度汇报", "受众": "老板", "场景": "汇报",
+        "页数要求": "10", "核心重点": "无", "边界": "无", "风格偏好": "商务简洁",
+    }, fewshot=False)
+    assert "【主题与受众】" in prompt
+    assert "【整体结构】" in prompt
+    assert "【逐页大纲】" in prompt
+    assert "【视觉建议】" in prompt
+    assert "{{" not in prompt, "变量填满后不应残留占位符"
+
+
+def test_ppt_general_fewshot_passes_own_validator():
+    """通用 PPT 的范文必须通过它自己的校验器（否则等于教模型写错）。"""
+    data = yaml.safe_load(
+        (ROOT / "fewshots" / "ppt_general.yaml").read_text(encoding="utf-8")
+    )
+    assert data["name"] == "ppt_general"
+    for ex in data["examples"]:
+        f = _parse_example_input(ex["input"])
+        case = {"主题": f["主题"], "受众": f["受众"],
+                "场景": f["场景"], "页数要求": f["页数要求"]}
+        failed = [n for n, ok, _ in validate_ppt_general(
+            ex["output"], case, check_contamination=False) if not ok]
+        assert not failed, f"通用 PPT 范文未通过自身校验：{failed}"
+    assert PPT_GENERAL_SECTIONS == ["主题与受众", "整体结构", "逐页大纲", "视觉建议"]
+
+
+def test_ppt_general_enum_inputs_validated():
+    """受众/场景是 enum，页数是 number，非法值应在入口预检被拦下。"""
+    bad = lib.invalid_inputs("ppt_general", {
+        "主题": "x", "受众": "路人", "场景": "汇报", "页数要求": "99",
+        "核心重点": "无", "边界": "无", "风格偏好": "无",
+    })
+    names = {p.name for p in bad}
+    assert "受众" in names, f"非法受众未被拦下：{bad}"
+    assert "页数要求" in names, f"越界页数未被拦下：{bad}"
+
+
+def test_ppt_general_scene_skeleton_enforced():
+    """场景骨架落地：整体结构里缺骨架词时应被检出（防止 5 场景套成同一套结构）。"""
+    data = yaml.safe_load(
+        (ROOT / "fewshots" / "ppt_general.yaml").read_text(encoding="utf-8")
+    )
+    good = data["examples"][0]["output"]
+    # 把汇报范文的整体结构改写为「背景→内容→结论」，命不中汇报骨架词
+    tampered = re.sub(
+        r"2\. 【整体结构】[^\n]*",
+        "2. 【整体结构】三部分：背景 → 内容 → 结论。逻辑线：先背景、再内容、最后结论。",
+        good,
+    )
+    case = {"场景": "汇报", "主题": "智能客服系统年度商业化汇报",
+            "受众": "老板", "页数要求": "10"}
+    failed = [n for n, ok, _ in validate_ppt_general(
+        tampered, case, check_contamination=False) if not ok]
+    assert any("场景骨架落地" in n for n in failed), f"场景骨架丢失未被检出：{failed}"
 
 
 def test_cot_meta_keys_filtered():
