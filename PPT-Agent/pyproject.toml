@@ -1,0 +1,20 @@
+[project]
+name = "ppt-agent"
+version = "0.1.0"
+description = "ReAct agent specialized to drive the ppt-master skill end to end"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.2.1",
+    "openai>=1.91.0",
+]
+
+[project.optional-dependencies]
+# 可选：装了就用它加载 .env，没装则用代码内置的轻量解析器
+dotenv = ["python-dotenv>=1.1.1"]
+
+[project.scripts]
+ppt-agent = "agent:main"
+
+[tool.uv]
+package = false

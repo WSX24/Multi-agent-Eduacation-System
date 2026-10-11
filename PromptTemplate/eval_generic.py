@@ -77,6 +77,8 @@ QA_SECTIONS = ["思路引导", "分步讲解", "分层适配", "同类题", "知
 MATERIAL_SECTIONS = ["审题", "作答", "回扣设问"]
 # 作文构思（teacher_outline）：交的是**方案**，也不是教案
 OUTLINE_SECTIONS = ["审题", "立意", "提纲", "素材", "首尾"]
+# PPT 课件（teacher_ppt）：交的是**逐页大纲**（能照着排版的页面清单），也不是教案
+PPT_SECTIONS = ["课件主题", "整体结构", "逐页大纲", "视觉建议"]
 
 validate_assistant = make_section_validator(
     ASSISTANT_SECTIONS,
@@ -740,6 +742,320 @@ def validate_outline(raw: str, case: dict, *,
     return checks
 
 
+# ────────────────── PPT 课件（teacher_ppt）──────────────────
+
+# PPT 课件最容易走形的地方（都可程序化判定）：
+#   ① 写成教案——借 teacher 渲染时 100% 发生，真跑输出全是教学模块；
+#   ② 页号断、页号重复、或只有标题的「空页」（PPT 上要有要点 + 配图 + 旁白）；
+#   ③ 要点写成整段话——PPT 是短语，不是作文。
+PPT_CONTAMINATION = ["质量守恒", "白磷", "丝绸之路", "张骞", "驼队"]
+
+# 页类型枚举：与模板「输出格式」里给的取值逐字一致，用于校验时只认这些词
+PPT_PAGE_TYPES = ["封面", "目录", "导入", "内容", "例题", "练习", "小结", "结束"]
+
+# 每页行首「第N页（类型）：」标记；页类型可省略，但页号必须顶行首
+_PPT_PAGE_RE = re.compile(r"^[ \t]*第\s*(\d{1,2})\s*页(?:[（(]([^）)]*)[）)])?", re.M)
+# 课件结构骨架：模板「能力边界」写死「导入→展开→小结」。同义说法也收，
+# 因为「引入/总结」是同一逻辑位置的自然写法。
+PPT_STRUCTURE_SKELETON = ("导入", "展开", "小结", "引入", "总结")
+
+# 学生水平档位 → 该档在输出里「看得见」的痕迹（与模板「条件分支指令」逐条对应）。
+# 为什么要查：这段档位差异过去只是提示词里的**请求**，模型不照做无人发现——
+# 实测：模板自带的「中等档」范文就没写「可能的提问」，一路畅通无人察觉。
+# 只对**可程序化判定**的档位设断言；基础档是「标准输出」，没有额外痕迹，故不设。
+PPT_BAND_MARKERS = {
+    "中等": "可能的提问",
+    "进阶": ("变式", "延伸思考"),
+    "竞赛": "挑战",
+}
+
+# 每条要点：行首 · / - / • 或 ①②③ 编号
+_PPT_BULLET_RE = re.compile(r"^[ \t]*[·•\-]\s*", re.M)
+# 一条要点超过这个字数，基本就是把短语写成了段落
+PPT_POINT_MAX = 25
+# 每页旁白低于这个字数，当「配音讲稿」就太薄了（模板要求 100-250 字，留 20% 余量）
+PPT_NARRATION_MIN = 80
+
+
+def ppt_pages(body: str) -> list[tuple[int, str]]:
+    """把【逐页大纲】切成 (页号, 该页正文) 的列表，按出现顺序。"""
+    marks = list(_PPT_PAGE_RE.finditer(body))
+    out: list[tuple[int, str]] = []
+    for i, m in enumerate(marks):
+        stop = marks[i + 1].start() if i + 1 < len(marks) else len(body)
+        out.append((int(m.group(1)), body[m.end():stop].strip()))
+    return out
+
+
+def validate_ppt(raw: str, case: dict | None = None, *,
+                    check_contamination: bool = True) -> list[tuple[str, bool, str]]:
+    """PPT 课件专用校验。``case`` 可给 ``页数要求``（int，声明了几页）、
+    ``课件主题``（查主题是否被自拟）、``学生水平``（查档位差异是否落地：
+    入门≤２条要点 / 中等每页带「可能的提问」/ 进阶含变式或延伸思考 / 竞赛含挑战页）。
+
+    为什么不能只查「模块齐不齐」：PPT 课件的价值在「每一页能不能照着做」，
+    所以必须逐页验：页号连续、每页有配图与旁白、要点是短语不是段落。
+    这是本角色存在的意义，只查模块会把「只有标题的空页」也放行。
+
+    ``check_contamination=False`` 用于校验 Few-shot 自身：范文的内容本就来自
+    它自己的主题，拿它对照自己必然命中（同 validate_material 的约定）。
+    """
+    checks: list[tuple[str, bool, str]] = []
+
+    def add(name: str, ok: bool, detail: str = "") -> None:
+        checks.append((name, ok, detail))
+
+    order, bodies = split_by_names(raw, PPT_SECTIONS)
+    missing = [s for s in PPT_SECTIONS if s not in bodies]
+    add(f"模块齐全({len(PPT_SECTIONS)})", not missing, f"缺 {missing}" if missing else "")
+    if missing:
+        return checks
+    idx = [order.index(s) for s in PPT_SECTIONS]
+    add("模块顺序正确", idx == sorted(idx), f"实际 {order}")
+    add("模块非空", all(bodies[s] for s in PPT_SECTIONS),
+        f"为空 {[s for s in PPT_SECTIONS if not bodies[s]]}")
+
+    # ---- 课件主题要点明受众与页数 ----
+    theme = bodies["课件主题"]
+    add("课件主题声明页数", "页" in theme, f"没写页数：{theme[:40]}")
+    # 课件主题不得自拟：真跑抳出过模型抓「光」这条线自己拟题（把「光合作用的
+    # 物质与能量转化」写成「探究光合作用需要光」）。这是可程序化判定的，钉死它。
+    if case and case.get("课件主题"):
+        add("课件主题沿用输入", case["课件主题"] in theme,
+            f"主题应为「{case['课件主题']}」，实际「{theme[:40]}」")
+
+    # ---- 整体结构要有逻辑线：导入 → 展开 → 小结 ----
+    # 原来只查 any(...) 命中「导入/展开/小结/→」任一个——出现一个「→」就过，
+    # 等于没查。改成要求命中 ≥2 个骨架词，与 ppt_general 的场景骨架同一标准。
+    structure = bodies["整体结构"]
+    hit = [k for k in PPT_STRUCTURE_SKELETON if k in structure]
+    add("整体结构落地(导入→展开→小结)", len(hit) >= 2,
+        f"命中 {hit}，需 ≥2 个骨架词" if hit
+        else f"骨架词全未命中：{list(PPT_STRUCTURE_SKELETON)}")
+
+    # ---- 逐页大纲：页号连续、每页完整、要点是短语 ----
+    pages = ppt_pages(bodies["逐页大纲"])
+    add("逐页大纲有页(≥4页)", len(pages) >= 4, f"实际 {len(pages)} 页")
+
+    nums = [n for n, _ in pages]
+    add("页号从 1 连续", nums == list(range(1, len(nums) + 1)),
+        f"页号 {nums}" if nums else "没解析到页号")
+
+    # 页数与声明一致（case 给了页数要求才查）
+    if case and case.get("页数要求"):
+        want = int(case["页数要求"])
+        add(f"页数=声明({want}页)", len(pages) == want, f"实际 {len(pages)} 页")
+
+    incomplete: list[int] = []
+    for n, body_p in pages:
+        if "配图" not in body_p or "旁白" not in body_p:
+            incomplete.append(n)
+    add("每页都有配图与旁白", not incomplete,
+        f"第 {incomplete} 页缺配图或旁白" if incomplete else "")
+
+    # 旁白要够充实：每页旁白至少 PPT_NARRATION_MIN 字。真跑抳出过只写两三句就收，
+    # 当「配音讲稿」用太薄——这是用户反馈的「内容单薄」的直接落点。
+    thin_narration: list[str] = []
+    for n, body_p in pages:
+        m = re.search(r"旁白[：:]\s*", body_p)
+        narration = body_p[m.end():].strip() if m else ""
+        if len(narration) < PPT_NARRATION_MIN:
+            thin_narration.append(f"第{n}页({len(narration)}字)")
+    add(f"旁白是完整讲稿(≥{PPT_NARRATION_MIN}字)", not thin_narration,
+        f"旁白太短：{'；'.join(thin_narration[:3])}" if thin_narration else "")
+
+    # 要点不能写成段落：把每页里「·」开头的行抽出来量长度
+    long_points: list[str] = []
+    for n, body_p in pages:
+        for line in body_p.splitlines():
+            s = line.strip()
+            if s.startswith(("·", "-", "•", "①", "②", "③", "④", "⑤")):
+                text = re.sub(r"^[·\-•①-⑤]\s*", "", s)
+                if len(text) > PPT_POINT_MAX:
+                    long_points.append(f"第{n}页「{text[:12]}…」({len(text)}字)")
+    add(f"要点是短语不是段落(≤{PPT_POINT_MAX}字)", not long_points,
+        f"写成段落：{'；'.join(long_points[:3])}" if long_points else "")
+
+    # ---- 学生水平档位落地（case 给了「学生水平」才查）----
+    band = (case or {}).get("学生水平")
+    if band == "入门":
+        over = [f"第{n}页({len(_PPT_BULLET_RE.findall(b))}条)"
+                for n, b in pages if len(_PPT_BULLET_RE.findall(b)) > 2]
+        add("入门档每页要点≤2条", not over,
+            f"超出：{'；'.join(over[:3])}" if over else "")
+    elif band in PPT_BAND_MARKERS:
+        wanted = PPT_BAND_MARKERS[band]
+        wanted = (wanted,) if isinstance(wanted, str) else wanted
+        if band == "中等":
+            # 模板原话是「每页旁白末尾补一句」，所以是逐页查，不是全文存在即可
+            miss = [n for n, b in pages if not any(m in b for m in wanted)]
+            add(f"中等档每页带「{wanted[0]}」", not miss,
+                f"第 {miss} 页缺「{wanted[0]}」" if miss else "")
+        else:
+            add(f"{band}档含「{'」或「'.join(wanted)}」",
+                any(m in raw for m in wanted),
+                f"{'、'.join(wanted)} 都没出现")
+
+    # ---- 视觉建议非空 ----
+    add("视觉建议非空", len(bodies["视觉建议"]) >= 5, "过短或为空")
+
+    # ---- 交课件大纲，不是交教案 ----
+    lessons = [m for m in TEACHING_MODULES if f"【{m}】" in raw]
+    add("未输出教学模块", not lessons, f"出现教学模块 {lessons}")
+    # 讲课口吻只在旁白里合法（旁白本就是讲稿，「这节课我们…」很正常）；
+    # 剥掉所有旁白后，页标题/要点/配图里再出现讲课口吻才是「写成教案」的征兆。
+    scaffold = raw
+    for _, body_p in pages:
+        m = re.search(r"旁白[：:]\s*", body_p)
+        if m:
+            scaffold = scaffold.replace(body_p[m.start():], "")
+    tones = [t for t in TEACHING_TONE if t in scaffold]
+    add("页标题与要点无讲解口吻", not tones, f"出现 {tones}" if tones else "")
+
+    latex = [t for t in LATEX if t in raw]
+    add("无 LaTeX 记号", not latex, f"出现 {latex}" if latex else "")
+    if check_contamination:
+        leak = [t for t in PPT_CONTAMINATION if t in raw]
+        add("无 Few-shot 主题污染", not leak, f"混入 {leak}" if leak else "")
+    return checks
+
+
+# ────────────────── 通用 PPT（ppt_general）──────────────────
+
+# 通用 PPT 最容易走形的地方（与 teacher_ppt 对齐，但体例不同）：
+#   ① 写成讲稿全文——通用 PPT 的旁白是「演讲提示」（80-180 字），不是配音稿；
+#   ② 场景骨架被忽略——5 个场景各有结构骨架，整体结构里应体现；
+#   ③ 页号断、空页、要点写成段落——与 teacher_ppt 相同。
+PPT_GENERAL_SECTIONS = ["主题与受众", "整体结构", "逐页大纲", "视觉建议"]
+
+# 污染词表：来自 fewshots/ppt_general.yaml 的主题词，与 teacher_ppt 的
+# PPT_CONTAMINATION（质量守恒/丝绸之路等）不重叠，各管各的。
+PPT_GENERAL_CONTAMINATION = ["智能客服", "续费率", "社区养老", "养老服务", "单店模型"]
+
+# 页类型枚举：与模板「输出格式」里给的取值逐字一致
+PPT_GENERAL_PAGE_TYPES = ["封面", "目录", "背景", "现状", "问题", "原因", "内容",
+                          "方案", "数据", "案例", "对比", "练习", "总结", "结束"]
+
+# 旁白字数：模板写 80-180，下界留 20% 余量 → 80；上界放宽到 200 防写成讲稿全文
+PPT_GENERAL_NARRATION_MIN = 80
+PPT_GENERAL_NARRATION_MAX = 200
+
+# 场景 → 骨架关键词（用于「场景骨架落地」检查：整体结构里应命中 ≥2 个，
+# 证明模型没有无视场景、把 5 个场景都套成同一套结构）
+PPT_GENERAL_SKELETON = {
+    "汇报": ["现状", "问题", "原因", "方案", "计划"],
+    "路演": ["痛点", "产品", "优势", "数据", "愿景"],
+    "教学": ["概念", "原理", "示例", "练习", "小结"],
+    "答辩": ["背景", "方法", "结果", "讨论", "结论"],
+    "产品介绍": ["场景", "痛点", "功能", "优势", "价格"],
+}
+
+
+def validate_ppt_general(raw: str, case: dict | None = None, *,
+                         check_contamination: bool = True) -> list[tuple[str, bool, str]]:
+    """通用 PPT 专用校验。``case`` 可给 ``主题 / 受众 / 场景 / 页数要求``。
+
+    与 ``validate_ppt`` 的关系：结构断言（页号连续、每页配图旁白、要点是短语）
+    复用同一套逐页解析；差异在三点——
+      ① 首模块从「课件主题」换成「主题与受众」，要验「受众 / 场景 / 页数」都声明了；
+      ② 旁白从「配音讲稿」换成「演讲提示」，字数区间收窄并加上界；
+      ③ 新增「场景骨架落地」：整体结构里必须命中该场景的骨架词，防止 5 个场景
+         被模型套成同一套结构（这是通用 PPT 的核心价值，只查模块会把「无视场景」放行）。
+    """
+    checks: list[tuple[str, bool, str]] = []
+
+    def add(name: str, ok: bool, detail: str = "") -> None:
+        checks.append((name, ok, detail))
+
+    order, bodies = split_by_names(raw, PPT_GENERAL_SECTIONS)
+    missing = [s for s in PPT_GENERAL_SECTIONS if s not in bodies]
+    add(f"模块齐全({len(PPT_GENERAL_SECTIONS)})", not missing, f"缺 {missing}" if missing else "")
+    if missing:
+        return checks
+    idx = [order.index(s) for s in PPT_GENERAL_SECTIONS]
+    add("模块顺序正确", idx == sorted(idx), f"实际 {order}")
+    add("模块非空", all(bodies[s] for s in PPT_GENERAL_SECTIONS),
+        f"为空 {[s for s in PPT_GENERAL_SECTIONS if not bodies[s]]}")
+
+    # ---- 主题与受众：要声明受众 / 场景 / 页数，主题不得自拟 ----
+    header = bodies["主题与受众"]
+    add("主题与受众声明页数", "页" in header, f"没写页数：{header[:40]}")
+    if case and case.get("主题"):
+        add("主题沿用输入", case["主题"] in header,
+            f"主题应为「{case['主题']}」，实际「{header[:40]}」")
+    if case and case.get("受众"):
+        add("主题与受众声明受众", case["受众"] in header,
+            f"没写受众：{header[:40]}")
+    if case and case.get("场景"):
+        add("主题与受众声明场景", case["场景"] in header,
+            f"没写场景：{header[:40]}")
+
+    # ---- 整体结构：有逻辑线 + 场景骨架落地 ----
+    structure = bodies["整体结构"]
+    add("整体结构有逻辑线", any(k in structure for k in ("→", "逻辑线", "部分")),
+        f"没写逻辑线：{structure[:40]}")
+    if case and case.get("场景"):
+        skeleton = PPT_GENERAL_SKELETON.get(case["场景"], [])
+        hit = [w for w in skeleton if w in structure]
+        add(f"场景骨架落地({case['场景']})", len(hit) >= 2,
+            f"命中 {hit}，需 ≥2 个骨架词" if hit else f"骨架词全未命中：{skeleton}")
+
+    # ---- 逐页大纲：页号连续、每页完整、旁白是演讲提示、要点是短语 ----
+    pages = ppt_pages(bodies["逐页大纲"])
+    add("逐页大纲有页(≥4页)", len(pages) >= 4, f"实际 {len(pages)} 页")
+
+    nums = [n for n, _ in pages]
+    add("页号从 1 连续", nums == list(range(1, len(nums) + 1)),
+        f"页号 {nums}" if nums else "没解析到页号")
+
+    if case and case.get("页数要求"):
+        want = int(case["页数要求"])
+        add(f"页数=声明({want}页)", len(pages) == want, f"实际 {len(pages)} 页")
+
+    incomplete: list[int] = []
+    for n, body_p in pages:
+        if "配图" not in body_p or "旁白" not in body_p:
+            incomplete.append(n)
+    add("每页都有配图与旁白", not incomplete,
+        f"第 {incomplete} 页缺配图或旁白" if incomplete else "")
+
+    # 旁白是演讲提示：80-200 字。太短 = 内容单薄；太长 = 写成讲稿全文。
+    bad_narration: list[str] = []
+    for n, body_p in pages:
+        m = re.search(r"旁白[：:]\s*", body_p)
+        narration = body_p[m.end():].strip() if m else ""
+        if not PPT_GENERAL_NARRATION_MIN <= len(narration) <= PPT_GENERAL_NARRATION_MAX:
+            bad_narration.append(f"第{n}页({len(narration)}字)")
+    add(f"旁白是演讲提示({PPT_GENERAL_NARRATION_MIN}~{PPT_GENERAL_NARRATION_MAX}字)",
+        not bad_narration,
+        f"旁白字数越界：{'；'.join(bad_narration[:3])}" if bad_narration else "")
+
+    long_points: list[str] = []
+    for n, body_p in pages:
+        for line in body_p.splitlines():
+            s = line.strip()
+            if s.startswith(("·", "-", "•", "①", "②", "③", "④", "⑤")):
+                text = re.sub(r"^[·\-•①-⑤]\s*", "", s)
+                if len(text) > PPT_POINT_MAX:
+                    long_points.append(f"第{n}页「{text[:12]}…」({len(text)}字)")
+    add(f"要点是短语不是段落(≤{PPT_POINT_MAX}字)", not long_points,
+        f"写成段落：{'；'.join(long_points[:3])}" if long_points else "")
+
+    # ---- 视觉建议非空 ----
+    add("视觉建议非空", len(bodies["视觉建议"]) >= 5, "过短或为空")
+
+    # ---- 交逐页大纲，不是交教案 ----
+    lessons = [m for m in TEACHING_MODULES if f"【{m}】" in raw]
+    add("未输出教学模块", not lessons, f"出现教学模块 {lessons}")
+
+    latex = [t for t in LATEX if t in raw]
+    add("无 LaTeX 记号", not latex, f"出现 {latex}" if latex else "")
+    if check_contamination:
+        leak = [t for t in PPT_GENERAL_CONTAMINATION if t in raw]
+        add("无 Few-shot 主题污染", not leak, f"混入 {leak}" if leak else "")
+    return checks
+
+
 if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -749,6 +1065,8 @@ if __name__ == "__main__":
     print("qa 期望模块:", QA_SECTIONS)
     print("teacher_material 期望模块:", MATERIAL_SECTIONS)
     print("teacher_outline 期望模块:", OUTLINE_SECTIONS)
+    print("teacher_ppt 期望模块:", PPT_SECTIONS)
+    print("ppt_general 期望模块:", PPT_GENERAL_SECTIONS)
     bad = ("1. 【得分】3/5\n2. 【答案判定】部分正确\n")
     print("残缺样本应报缺模块:", [n for n, ok, _ in validate_assistant(bad) if not ok])
     # 自检作文解析器：故意让维度之和与总分对不上，应当被检出
