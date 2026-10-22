@@ -236,6 +236,28 @@ def split_query_variants(reference: str) -> Tuple[str, List[str]]:
     return main, [v for v in variants if v]
 
 
+#: Reference 里的「备选查询」分隔符：`岳飞｜岳飞 宋代 画像（…）｜备选：水墨 雪山 关隘（…）`
+_FALLBACK_RE = re.compile(r"[|｜]\s*备选\s*[:：]\s*(.+)$", re.S)
+
+
+def split_fallback(reference: str) -> Tuple[str, str]:
+    """把 Reference 拆成 (主查询, 备选查询)。
+
+    为什么需要它（2026-10-22 用户口径「肯定优先匹配人名」）：
+    人物页先按人名搜（万一图源里真有画像/图传/博物馆藏品），但人名命中率很低——
+    书格是古籍全文检索，搜「岳飞」返回《孟子》《孝经》。所以模型必须同时给一条
+    **意象备选**（水墨 雪山 关隘…），主查询全部图源失败后自动改用备选，
+    而不是因为「搜不到画像」就整页空着、或者去配猫。
+
+    没有备选标记时原样返回（向后兼容）。
+    """
+    ref = (reference or "").strip()
+    m = _FALLBACK_RE.search(ref)
+    if not m:
+        return ref, ""
+    return ref[: m.start()].strip(), m.group(1).strip()
+
+
 # ---------------------------------------------------------------------------
 # 图片尺寸
 # ---------------------------------------------------------------------------
@@ -269,6 +291,10 @@ class FetchResult:
     needs_selection: bool = False
     #: 该结果的标题/标签等元数据，用于「相关性闸门」判断是否真的对得上
     match_text: str = ""
+    #: 人工索引点名（意象 → 书格书页）命中。这类候选的「对不对」由索引负责，
+    #: 不再过文字相关性/实体闸门——《关山积雪图卷》与「雪山关隘」在字面上是 0 命中，
+    #: 但那就是对的图（2026-10-22 岳飞那册 p09 实测）。风格闸门仍然生效。
+    trusted: bool = False
 
 
 def fetch_web(project: Path, row: ImageRow, skill_dir: Path,
@@ -883,6 +909,47 @@ SHUGE_TEXT_PAGES: Dict[str, set] = {
     "hong_lou_meng_tu_yong": {"01", "02", "03", "04", "06", "09", "13", "16", "18", "21"},
 }
 
+#: 人工索引（第二张）：**意象 → 书格书页**。
+#:
+#: 为什么需要它：书格是**按书名检索**的站，而古画的书名用的是文言命名。
+#: 搜「雪山关隘古道」只会返回《王孟津赠汤若望诗册》（书法，完全不对），
+#: 真正的雪景山水叫《关山积雪图卷》—— 字面上一个词都不重合，
+#: `relevance()` 必然给 0 分，再好的图也会被闸门丢掉（2026-10-22 岳飞那册 p09）。
+#: 所以「哪个意象该去翻哪本书」交给人工点单，命中后这张图**不再过文字闸门**
+#: （`FetchResult.trusted`），但仍要过风格闸门（现代痕迹/建筑否决）。
+#: 键是正则（匹配 Reference + Purpose 全串），值是 (书页, 标签)。
+SHUGE_INTENT_BOOKS: List[tuple] = [
+    (r"雪|寒林|关山|关隘|边塞|塞外|征战|沙场",
+     [("https://www.shuge.org/view/guan_shan_ji_xue_tu_juan/", "关山积雪图卷"),
+      ("https://www.shuge.org/view/xi_shan_xue_yi_tu_juan/", "溪山雪意图卷")]),
+    (r"山水|远山|群峰|溪山|画卷|长卷|烟雨|楼阁|亭台",
+     [("https://www.shuge.org/view/xia_shan_yu_yu_tu_juan/", "夏山欲雨图卷"),
+      ("https://www.shuge.org/view/tian_xia_ming_shan_tu/", "天下名山图册")]),
+    (r"江|舟|渡|水|汀|烟波|渔",
+     [("https://www.shuge.org/view/long_chi_jing_du_tu_juan/", "龙池竞渡图卷")]),
+    (r"园林|山庄|庭院|廊|寺|庙",
+     [("https://www.shuge.org/view/yu_zhi_bi_shu_shan_zhuang_shi_tu_ce/", "御制避暑山庄诗图册")]),
+    (r"花|落红|折枝|春|桃|柳|兰|梅|荷",
+     [("https://www.shuge.org/view/song_yuan_ming_ren_hua_niao_he_bi/", "宋元明人花鸟合璧"),
+      ("https://www.shuge.org/view/shi_er_yue_hua_shen_ce/", "十二月花神册")]),
+    (r"仕女|闺|梳妆|对镜|女子|秋千",
+     [("https://www.shuge.org/view/shi_nv_tu_ce/", "诗女图册")]),
+    (r"月|秋|四时|晨|暮",
+     [("https://www.shuge.org/view/si_shi_you_shang/", "四时幽赏")]),
+]
+
+
+def _shuge_index_books(query: str) -> List[tuple]:
+    """按意象挑书页：命中哪条就用哪条（多条全用，按声明顺序）。"""
+    text = query or ""
+    picked: List[tuple] = []
+    for pattern, books in SHUGE_INTENT_BOOKS:
+        if re.search(pattern, text):
+            for url, title in books:
+                if (url, title) not in picked:
+                    picked.append((url, title))
+    return picked
+
 
 def _shuge_preferred(book: str, hint: str) -> List[str]:
     """按意图关键词从人工索引里取候选编号；没有则返回空。"""
@@ -924,24 +991,29 @@ def search_shuge(query: str, limit: int = 3) -> List[Dict[str, str]]:
 
     out: List[Dict[str, str]] = []
     posts: List[dict] = []
-    # WordPress 的 search 对多词中文命中差（「红楼梦 宝黛」→ 0 条），逐级回退
-    probes = _shuge_probes(query)
-    for probe in probes[:5]:
-        try:
-            r = requests.get(f"{SHUGE_API}/search",
-                             params={"search": probe, "per_page": limit},
-                             headers=SHUGE_UA, timeout=20)
-            if r.ok and r.json():
-                posts = [p for p in r.json() if p.get("url")]
-                if posts:
-                    break
-        except Exception:  # noqa: BLE001
-            continue
+    # ① 人工索引：意象 → 书页（最准，优先）
+    for url, title in _shuge_index_books(query):
+        posts.append({"url": url, "title": title, "_indexed": True})
+    # ② 常规检索（词命中差，逐级回退）。索引已经给书了就不再多此一举。
+    if not posts:
+        probes = _shuge_probes(query)
+        for probe in probes[:5]:
+            try:
+                r = requests.get(f"{SHUGE_API}/search",
+                                 params={"search": probe, "per_page": limit},
+                                 headers=SHUGE_UA, timeout=20)
+                if r.ok and r.json():
+                    posts = [p for p in r.json() if p.get("url")]
+                    if posts:
+                        break
+            except Exception:  # noqa: BLE001
+                continue
     if not posts:
         return out
 
     cjk_query = "".join(re.findall(r"[一-鿿]", query or "")[:8])
-    for post in posts[:limit]:
+    for post in posts[:max(limit, 4)]:
+        indexed = bool(post.get("_indexed"))
         page_url = str(post.get("url"))
         title_cn = str(post.get("title") or "")
         slug = page_url.rstrip("/").rsplit("/", 1)[-1]
@@ -958,7 +1030,8 @@ def search_shuge(query: str, limit: int = 3) -> List[Dict[str, str]]:
         # 被旧的书名交集规则全部挡掉，结论就成了「林冲找不到」。
         # 反过来，查「紫藤萝花瀑」命中《十二月花神册》时，正文里并不会有
         # 「紫藤」，这样又能正确拒掉。
-        if cjk_query:
+        # 人工索引点名的书**不跑这句**：《关山积雪图卷》与「雪山关隘」字面零重合。
+        if cjk_query and not indexed:
             hay = title_cn + " " + page.text
             if not any(cjk_query[i:i + 2] in hay for i in range(len(cjk_query) - 1)):
                 continue
@@ -981,7 +1054,8 @@ def search_shuge(query: str, limit: int = 3) -> List[Dict[str, str]]:
         urls.sort(key=_key)
         for url in urls:
             out.append({"url": url, "page": page_url,
-                        "title": str((post.get("title") or ""))[:60]})
+                        "title": str((post.get("title") or ""))[:60],
+                        "trusted": indexed})
         if len(out) >= 40:
             break
     return out
@@ -1011,6 +1085,30 @@ def fetch_shuge(project: Path, row: ImageRow, skill_dir: Path,
     text_pages = SHUGE_TEXT_PAGES.get(book_slug, set())
 
     ordered: List[Dict[str, str]] = []
+    if any(c.get("trusted") for c in candidates):
+        # 人工索引点名的书：**手卷/册页的前后都是引首与题跋（满纸书法）**，画心在中间。
+        # 实测《夏山欲雨图卷》9 页：01 带题签、08-09 是跋文。旧的 SHUGE_SKIP_FRONT=7
+        # 按「大书」调的，对 9 页小卷直接跳到跋文上——封面就变成了一整屏书法。
+        # 所以索引书按比例去头去尾，而不是用固定偏移。
+        def _pageno(cand: Dict[str, str]) -> Optional[int]:
+            m = re.search(r"(\d{1,3})(?=\.[A-Za-z]+$)", cand["url"].rsplit("/", 1)[-1])
+            return int(m.group(1)) if m else None
+
+        nums = sorted({n for c in candidates if (n := _pageno(c)) is not None})
+        if len(nums) > 6:
+            keep = set(nums[3:-2])
+            trimmed = [c for c in candidates if _pageno(c) in keep]
+            if trimmed:
+                candidates = trimmed
+                    # 保留顺序，仅剔除首尾
+        # 索引书直接按（去头去尾后的）书页顺序取，不走 SHUGE_SKIP_FRONT 的固定偏移；
+        # 同一册里多页命中同一本书时按 nth 轮转，避免两页拿同一张。
+        nth = _SHUGE_USED.get(book_key, 0)
+        _SHUGE_USED[book_key] = nth + 1
+        if candidates:
+            shift = nth % len(candidates)
+            ordered = candidates[shift:] + candidates[:shift]
+            ordered = ordered[:8]
     if prefer:
         # 索引里多张候选时按书内序号轮转，避免三页拿到同一张
         shift = _SHUGE_USED.get(book_key, 0)
@@ -1061,7 +1159,8 @@ def fetch_shuge(project: Path, row: ImageRow, skill_dir: Path,
             attribution_text=f"选自《{cand.get('title') or ''}》，书格 shuge.org，CC BY-NC 4.0",
             status="sourced")
         return FetchResult(True, f"书格 {size[0]}x{size[1]}｜{cand['title'][:24]}", "shuge",
-                           match_text=f"{cand['title']} {cand['url'].rsplit('/', 1)[-1]}")
+                           match_text=f"{cand['title']} {cand['url'].rsplit('/', 1)[-1]}",
+                           trusted=bool(cand.get("trusted")))
     return FetchResult(False, f"书格：{len(candidates)} 张候选均不可用")
 
 
@@ -1669,15 +1768,52 @@ def _is_classical_row(row: Optional[ImageRow]) -> bool:
     return row is not None and any(k in _row_text(row) for k in _CLASSICAL_HINTS)
 
 
+#: 古画行不跑「只出实景照片」的图库
+_STOCK_PHOTO_PROVIDERS = ("pexels", "pixabay")
+
+#: 古画/博物馆类图源：元数据是「作者 + 画名 + 朝代」，与「山河朝阳」这类中文意象词
+#: 几乎不可能字符串命中。对它们用实体硬门槛，实测会把**正确**的中国水墨画全拒掉：
+#: 2026-10-22 岳飞那册 p09/p10/p06 三行全灭（Met 相关度 1.00 的水墨山水被「实体未命中」拒），
+#: 整册退回 0 图。所以这三家的实体门槛降级——画种风险它们自己卡了
+#: （Met 卡 culture=China + 公有领域，书格整站古籍古画），闸门交给 relevance + _style_mismatch。
+_ART_SOURCES = ("shuge", "met", "local")
+
+#: 明确要「画」而不是「照片」的措辞（只看 Reference/Purpose/Type，不猜）
+_PAINTING_HINTS = (
+    "水墨", "古画", "国画", "绢本", "纸本", "设色", "工笔", "写意", "青绿",
+    "白描", "长卷", "手卷", "册页", "扇面", "界画", "丹青", "拓本", "画册",
+    "ink painting", "ink wash", "scroll painting", "painting", "brushwork",
+)
+
+
+def _wants_painting(row: ImageRow) -> bool:
+    """这一行要的是「画」还是「照片」。
+
+    只在**有明确证据**时返回 True：§VIII 的 `Type` 写了 Painting/Illustration，
+    或 Reference/Purpose 里写了水墨/古画/长卷……否则一律 False——
+   “荷塘实景照”“紫藤花瀑”这类正常照片需求不能被卡死。
+
+    为什么需要它（2026-10-22 事故）：岳飞《满江红》P09「踏破贺兰山缺」要的是水墨关隘，
+    结果落了 Pixabay 的雪山彩照，贴在一整册宣纸淡彩版面上像一个 PPT 里夹了张风景壁纸。
+    判据写在数据里（Type/Reference），不靠模型自报风格。
+    """
+    typ = str(row.get("Type") or "").strip().lower()
+    if typ.startswith("paint") or typ.startswith("illustration"):
+        return True
+    return any(k in _row_text(row) for k in _PAINTING_HINTS)
+
+
 def _provider_order_for(row: ImageRow, default: Sequence[str]) -> List[str]:
     """按需求类型重排图源；只在给定 providers 内重排，不新增能力。"""
     base = list(default)
     text = _row_text(row)
     if _is_arts_row(row) or _is_classical_row(row):
-        # 人物/文物/版画/古诗文：博物馆源有分类、藏品元数据和干净的授权，
-        # 排最前（met 零 key 且本机直连可达，比 wikimedia 稳）。
-        # 书格只当文献/书籍图像源（整书扫描页容易冒充人物画像），排后。
-        order = ["met", "wikimedia", "openverse", "shuge", "pixabay", "pexels"]
+        # 古画/文物/版画/古诗文：**书格排第一**。
+        # 2026-10-22 实测：met/wikimedia/openverse 三家在这台机器上一次都没成——
+        # met 要 culture=China + PD（命中率低），wikimedia/openverse 走代理，
+        # 代理没开就直接连错三次，等到书格时尝试额度已用完，最后落到 pixabay 的
+        # 实景彩照（岳飞那册 P09 的雪山照就是这么来的）。古画需求先把能出古画的那家试完。
+        order = ["shuge", "met", "wikimedia", "openverse", "pixabay", "pexels"]
     elif any(k in text for k in _SCENE_HINTS):
         order = ["pixabay", "pexels", "met", "wikimedia", "openverse", "shuge"]
     else:
@@ -2209,7 +2345,30 @@ def _reachable_providers(providers: Sequence[str]) -> List[str]:
     return [p for p, ok in zip(providers, results) if ok]
 
 
-def fetch_local(project: Path, row: ImageRow) -> FetchResult:
+#: 本地库：实景照片源 / 认作古画的源（只看来源域名，不看文件名）
+_LOCAL_PHOTO_HOSTS = ("pixabay.com", "pexels.com", "unsplash.com")
+_LOCAL_ART_HOSTS = ("shuge.org", "commons.wikimedia.org", "metmuseum.org")
+_LOCAL_ART_TITLE_RE = re.compile(
+    r"画|绘|卷|册|轴|扇面|绢本|纸本|设色|版画|浮世绘|图咏|"
+    r"painting|print|ukiyo|scroll|album|woodblock", re.I)
+
+
+def _local_is_art(item: Dict[str, object]) -> bool:
+    """本地库里这张是「古画/版画」还是「实景照片」。
+
+    不看文件名：库里的 `art_lotus_pond.jpg` 其实是 Pixabay 照片（前缀是后人加的）。
+    只看来源域名；域名认不出时，才看标题里的画种字眼。
+    """
+    src = str(item.get("source") or "").lower()
+    if any(h in src for h in _LOCAL_PHOTO_HOSTS):
+        return False
+    if any(h in src for h in _LOCAL_ART_HOSTS):
+        return True
+    text = f"{item.get('title') or ''} {item.get('attribution') or ''}"
+    return bool(_LOCAL_ART_TITLE_RE.search(text))
+
+
+def fetch_local(project: Path, row: ImageRow, paint_only: bool = False) -> FetchResult:
     """先查本地库：命中就直接复制，不走网络。
 
     本地库存的是 PD 古画/版画和已下载的 Pixabay 图——「林冲」「雪山」这类
@@ -2236,6 +2395,12 @@ def fetch_local(project: Path, row: ImageRow) -> FetchResult:
                 break
     if not matches:
         return FetchResult(False, "本地库未命中")
+    if paint_only:
+        kept = [m for m in matches if _local_is_art(m)]
+        if not kept:
+            return FetchResult(
+                False, f"本地库命中 {len(matches)} 条但全是实景照片（本行要古画/水墨）")
+        matches = kept
 
     deck_key = str(project.resolve())
     with _STATE_LOCK:
@@ -2343,91 +2508,132 @@ def run_image_phase(project: Path, skill_dir: Path,
 
     def handle_row(row: ImageRow) -> None:
         if row.acquire == "web" and source in ("web", "auto"):
-            local_result = fetch_local(project, row)
             arts_row = _is_arts_row(row)
-            result = FetchResult(False, "未尝试")
-            providers_try = _provider_order_for(
-                row,
-                DEFAULT_PROVIDERS if providers is DEFAULT_PROVIDERS else providers)
-            providers_try = [p for p in providers_try if p in available]
-            # 本地库也用「虚拟图源 local」进同一个循环：
-            # 以前 local 命中就把 providers_try 清空，等于**绕过全部闸门**
-            # （只要索引词命中就直接上版面）。现在本地图同样要过
-            # relevance / 实体 / 题材覆盖，不过就换图库。
-            if local_result.ok:
-                providers_try = ["local"] + providers_try
-                say(f"     · 本地库候选：{local_result.note}")
+            want_paint = (arts_row or _is_classical_row(row)) and _wants_painting(row)
             # 逐家失败原因要留下来：否则最后只显示「最后一家」的报错，
             # 用户看不到「Met 有 9 条但都不是公有领域」「wikimedia 超时」这类关键信息
             notes: List[str] = []
-            for provider in providers_try:
-                if provider == "local":
-                    result = local_result
-                elif provider == "shuge":
-                    result = fetch_shuge(project, row, skill_dir)
-                elif provider == "pixabay":
-                    result = fetch_pixabay(project, row, skill_dir, max_candidates=max_candidates)
-                elif provider == "met":
-                    result = fetch_met(project, row, skill_dir, max_candidates=max_candidates)
-                else:
-                    override = ""
-                    if (arts_row and provider in ("wikimedia", "openverse")
-                            and "｜" in (row.reference or "")):
-                        override = (row.reference or "").split("｜", 1)[0].strip()
-                    result = fetch_web(project, row, skill_dir, providers=[provider],
-                                       retries=retries, review=review,
-                                       max_candidates=max_candidates,
-                                       query_override=override)
-                if result.needs_selection:
-                    break
-                if not result.ok:
-                    notes.append(f"{provider}:{result.note}")
-                    continue
-                # ── 相关性闸门放在循环**内**：被拒就换下一家 ──
-                # 实测事故（2026-10-19 紫藤萝）：书格先「成功」拿到不相干的花册，
-                # 闸门在循环之后才判，拒了也不会回头试 Pixabay，结果整册没配图，
-                # 而 Pixabay 上其实有 255+ 张紫藤。
-                if not strict:
-                    break
-                probe_text = result.match_text or _manifest_match_text(project, row.filename)
-                score = relevance(row.reference or row.get("Purpose"), probe_text)
-                # 实体门槛对**所有**带 `实体｜` 前缀的行生效（不只 arts）：
-                # 2026-10-20 赤壁赋事故——P07「洞箫」收下危地马拉排箫老头、
-                # P12「月夜江舟」收下伦敦塔桥，都是非 arts 行只走 relevance 的结果。
-                entity_ok = (_entity_hit(row.reference or "", probe_text)
-                             and _term_coverage(row.reference or "", probe_text))
-                if arts_row and _style_mismatch(probe_text):
-                    entity_ok = False
-                    why_style = "风格不符（水墨/古画需求命中现代/照片特征）"
-                else:
-                    why_style = ""
-                with stats_lock:
-                    duplicate = probe_text in used_texts
-                    accepted = score >= MIN_RELEVANCE and entity_ok and not duplicate
+
+            def _attempt(alt: ImageRow) -> FetchResult:
+                """把一行（或它的备选查询）对所有图源跑一遍，返回值不抛异常。"""
+                local_result = fetch_local(project, alt, paint_only=want_paint)
+                result = FetchResult(False, "未尝试")
+                providers_try = _provider_order_for(
+                    alt,
+                    DEFAULT_PROVIDERS if providers is DEFAULT_PROVIDERS else providers)
+                providers_try = [p for p in providers_try if p in available]
+                # 古画行不跑「只出实景照片」的图库：跑了也只能拿回彩照，
+                # 而彩照落到宣纸版面上就是风格事故（岳飞那册 P09 雪山照）。
+                # 宁可不配（该页退化成排版页，版面不破），也不上错风格。
+                if want_paint:
+                    dropped = [p for p in providers_try if p in _STOCK_PHOTO_PROVIDERS]
+                    providers_try = [p for p in providers_try
+                                     if p not in _STOCK_PHOTO_PROVIDERS]
+                    if dropped:
+                        say(f"     · 本行要古画/水墨：跳过实景图库 {','.join(dropped)}")
+                # 本地库也用「虚拟图源 local」进同一个循环：
+                # 以前 local 命中就把 providers_try 清空，等于**绕过全部闸门**
+                # （只要索引词命中就直接上版面）。现在本地图同样要过
+                # relevance / 实体 / 题材覆盖，不过就换图库。
+                if local_result.ok:
+                    providers_try = ["local"] + providers_try
+                    say(f"     · 本地库候选：{local_result.note}")
+                for provider in providers_try:
+                    if provider == "local":
+                        result = local_result
+                    elif provider == "shuge":
+                        result = fetch_shuge(project, alt, skill_dir)
+                    elif provider == "pixabay":
+                        result = fetch_pixabay(project, alt, skill_dir,
+                                               max_candidates=max_candidates)
+                    elif provider == "met":
+                        result = fetch_met(project, alt, skill_dir,
+                                           max_candidates=max_candidates)
+                    else:
+                        override = ""
+                        if (arts_row and provider in ("wikimedia", "openverse")
+                                and "｜" in (alt.reference or "")):
+                            override = (alt.reference or "").split("｜", 1)[0].strip()
+                        result = fetch_web(project, alt, skill_dir, providers=[provider],
+                                           retries=retries, review=review,
+                                           max_candidates=max_candidates,
+                                           query_override=override)
+                    if result.needs_selection:
+                        break
+                    if not result.ok:
+                        notes.append(f"{provider}:{result.note}")
+                        continue
+                    # ── 相关性闸门放在循环**内**：被拒就换下一家 ──
+                    # 实测事故（2026-10-19 紫藤萝）：书格先「成功」拿到不相干的花册，
+                    # 闸门在循环之后才判，拒了也不会回头试 Pixabay，结果整册没配图，
+                    # 而 Pixabay 上其实有 255+ 张紫藤。
+                    if not strict:
+                        break
+                    probe_text = (result.match_text
+                                  or _manifest_match_text(project, alt.filename))
+                    score = relevance(alt.reference or alt.get("Purpose"), probe_text)
+                    # 实体门槛对**所有**带 `实体｜` 前缀的行生效（不只 arts）：
+                    # 2026-10-20 赤壁赋事故——P07「洞箫」收下危地马拉排箫老头、
+                    # P12「月夜江舟」收下伦敦塔桥，都是非 arts 行只走 relevance 的结果。
+                    entity_ok = (_entity_hit(alt.reference or "", probe_text)
+                                 and _term_coverage(alt.reference or "", probe_text))
+                    if not entity_ok and provider in _ART_SOURCES:
+                        # 古画源：中文意象词 ↔ 英文藏品名的错配不算「实体未命中」
+                        entity_ok = True
+                    if result.trusted:
+                        # 人工索引点名的书（意象 → 书页）：字面必然 0 命中，但那是对的图。
+                        # 例：《关山积雪图卷》对应「雪山关隘古道」，字上一个词不重合。
+                        # **风格闸门仍在下面生效**：索引只免除「对不对得上」，不免「像不像」。
+                        entity_ok = True
+                    if arts_row and _style_mismatch(probe_text):
+                        entity_ok = False
+                        why_style = "风格不符（水墨/古画需求命中现代/照片特征）"
+                    else:
+                        why_style = ""
+                    with stats_lock:
+                        duplicate = probe_text in used_texts
+                        accepted = ((score >= MIN_RELEVANCE or result.trusted)
+                                    and entity_ok and not duplicate)
+                        if accepted:
+                            used_texts.add(probe_text)
+                    # —— P2 加权诊断：只读，不改变上面算好的 accepted ——
+                    # 一行一打：一条取图日志里就能看出「现判」与「加权判」差在哪。
+                    if p2_diag:
+                        _p2_diagnose(alt, probe_text, accepted, say, diag)
                     if accepted:
-                        used_texts.add(probe_text)
-                # —— P2 加权诊断：只读，不改变上面算好的 accepted ——
-                # 一行一打：一条取图日志里就能看出「现判」与「加权判」差在哪。
-                if p2_diag:
-                    _p2_diagnose(row, probe_text, accepted, say, diag)
-                if accepted:
-                    break
-                (project / "images" / row.filename).unlink(missing_ok=True)
-                _remove_source_record(project, row.filename)
-                why = (why_style if why_style
-                       else f"相关度 {score:.2f} < {MIN_RELEVANCE}"
-                       if score < MIN_RELEVANCE
-                       else "实体未命中（结果里没有该人物/器物）")
-                if score >= MIN_RELEVANCE and entity_ok and duplicate:
-                    why = "与本册已用图片重复"
-                say(f"     · {provider}: {why}，换下一家")
-                if why != "与本册已用图片重复":
-                    _record_rejected(project, provider, probe_text, why,
-                                     filename=row.filename,
-                                     reference=row.reference or "")
-                result = FetchResult(False, f"{provider} 结果不合格（{why}）")
-            if (not result.ok and not result.needs_selection and notes):
-                result = FetchResult(False, "｜".join(notes[:4]))
+                        break
+                    (project / "images" / alt.filename).unlink(missing_ok=True)
+                    _remove_source_record(project, alt.filename)
+                    why = (why_style if why_style
+                           else f"相关度 {score:.2f} < {MIN_RELEVANCE}"
+                           if score < MIN_RELEVANCE
+                           else "实体未命中（结果里没有该人物/器物）")
+                    if score >= MIN_RELEVANCE and entity_ok and duplicate:
+                        why = "与本册已用图片重复"
+                    say(f"     · {provider}: {why}，换下一家")
+                    if why != "与本册已用图片重复":
+                        _record_rejected(project, provider, probe_text, why,
+                                         filename=alt.filename,
+                                         reference=alt.reference or "")
+                    result = FetchResult(False, f"{provider} 结果不合格（{why}）")
+                if (not result.ok and not result.needs_selection and notes):
+                    result = FetchResult(False, "｜".join(notes[:4]))
+                return result
+
+            # ── 先按主查询（人名/实体）取，取不到再用备选（意象）取一次 ──
+            # 用户口径 2026-10-22：「人物画像搜不到就算，肯定优先匹配人名」。
+            main_ref, fallback_ref = split_fallback(row.reference or "")
+            first_row = row
+            if main_ref and main_ref != (row.reference or ""):
+                first_row = ImageRow(dict(row.cells))
+                first_row.set("Reference", main_ref)
+            result = _attempt(first_row)
+            if fallback_ref and not result.ok and not result.needs_selection:
+                say(f"     · {row.filename}: 主查询未命中 → 改用备选「{fallback_ref[:30]}」")
+                alt_row = ImageRow(dict(row.cells))
+                alt_row.set("Reference", fallback_ref)
+                notes.clear()
+                result = _attempt(alt_row)
             if (not result.ok and not result.needs_selection
                     and source == "auto" and (os.getenv("IMAGE_BACKEND") or "").strip()):
                 say(f"     · {row.filename}: web 失败（{result.note}）→ 尝试 AI 生图")

@@ -156,10 +156,20 @@ IMAGE_FILL_BLOCK = """
 **需要（写一行）**：实景照片、真实实验场景、产品实物、花鸟山水类古画；
 需要照片质感当视觉主体。
 
-**不要写行（2026-10-22 起硬性）**：
-· **人物肖像**（历史人物、文学人物、名人）—— 全部图源都取不到，实测会配到猫/向日葵/圣诞卡；
-· **考据类图像**（战车复原、城阙结构、器物形制）—— 图库没有这类图。
-这两类交给执行器用 SVG 画剪影或纯排版，比配错图体面。
+**人物页：人名优先，但必须带备选**（2026-10-22 用户口径「肯定优先匹配人名」）：
+· **人物本人的画像**（历史人物、文学人物、名人）：**照写一行**，Reference 第一段写人名——
+  万一图源里有画像/图传/博物馆藏品，就该用它。
+· 但同一行 **必须** 在末尾加第三段 `｜备选：<意象查询>`：
+  `岳飞｜岳飞 宋代 画像（Yue Fei Song dynasty portrait）｜备选：水墨 雪山 关隘（Chinese ink snow mountain pass）`
+  人名扫不到时，执行器自动改用备选再跑一遍；不写备选 → 搜不到画像就整页空着。
+· **考据类图像**（战车复原、城阙结构、器物形制）：图库没有，直接写意象备选即可。
+
+⚠️ 写人名时不要附加「画像」当唯一定语：实测`李清照画像`会配到一张猫（猫的标签写着「猫画像」）。
+写成 `主语｜人名 朝代 画种（English）` 这种带限定词的形态。
+
+**整册下限（硬性）**：文史/古诗词/赏析类课件 **至少 2 行**（封面 + 至少一处场景页），最多 8 行；
+只有纯数学/理工/图表册才允许 §VIII 只有表头。
+实测教训：2026-10-22 岳飞《满江红》整册 0 图，用户第一句话是「怎么一张图都没了」。
 
 **不需要（不写行）**：概念图、流程图、公式、函数图像、几何图、数据图。
 这些交给执行器用 SVG 原生画，比照片清晰得多。
@@ -789,38 +799,52 @@ PLAN_IMAGE_BLOCK = """
 
 每页 roster 必须有 `visual` 字段：
 
-  "visual": {"mode": "photo", "subject": "林冲", "query_en": "Lin Chong Water Margin woodcut"}
+  "visual": {"mode": "photo", "subject": "风雪荒原古城", "query_en": "Chinese ink snow frontier pass"}
 
 · `mode=code` —— 函数图像、几何、立体、公式、流程图、状态机、时间轴、数据图、表格。
   这些由执行器用代码精确绘制，**绝不允许进 images**（搜图只会更差）。
-· `mode=photo` —— 真实人物画像、实景照片、文物古画、版画/绣像、显微照片、真实实验场景。
+· `mode=photo` —— 真实影像页：实景照片、文物古画、版画/绣像、书画拓本，**以及意象图**
+  （用山水/风雪/舟船/古城/花鸟承载某一页的场景与情绪）。
 · `mode=none` —— 纯概念、纯文字、纯排版页。
 
-判定标准：**这一页是否指向现实世界里的某个具体对象**。指向人物/地点/器物/历史图像 → photo；
+判定标准：**这一页是否指向现实世界里的某个具体对象**。指向地点/器物/自然景物/历史图像 → photo；
 抽象关系、数量关系、结构关系 → code。
 
-⛔ **人物肖像一律不要声明配图**（2026-10-22 起，用户口径「人物肖像就别画了」）：
-历史人物画像（岳飞、李清照、林冲、宝黛…）在现有全部图源里**都取不到**
-（书格是古籍文字页、Met 没有中国名人、Pixabay 没有、必应抽风），实测结果是配到
-猫、向日葵、圣诞贺卡。遇到这类页：`visual.mode` 写 `none`，**不写 images 条目**，
-由执行器用 SVG 画剪影/侧栏人像或纯排版。
-同理**考据类图像**（战车复原、城阙结构、器物形制）也默认不声明 —— 图库没有这类图。
+⚠️ **人物页：先按人名搜，搜不到再退意象图**（2026-10-22 用户口径「肯定优先匹配人名」）：
+· **人名排第一**：`subject` 就写人名（岳飞、李清照、林冲、宝黛），Reference 第一段写
+  `岳飞｜岳飞 宋代 画像（Yue Fei Song dynasty portrait）`。别绕开——万一图源里真有
+  画像/图传/博物馆藏品，那就该用它，不要提前放弃。
+· **但必须同时给备选**：Reference 末尾加第三段
+  `｜备选：水墨 雪山 关隘（Chinese ink snow mountain pass）`。
+  主查询（人名）在所有图源上都没命中时，执行器会自动改用备选再跑一遍 —— 不会因为
+  「搜不到画像」就整页空着，更不会去配猫。
+· 为什么人名命中率低：书格是**古籍全文检索**，搜「岳飞」返回《孟子》《孝经》；
+  Met 没有中国名人条目；Pixabay 没有古人照片。实测不给备选时，这类页要么配到
+  猫/向日葵/圣诞贺卡，要么整册 0 图（2026-10-22 岳飞那册）。
+· 一册文史/赏析类课件 **至少 2 条、最多 8 条** images；只有纯数学/理工/图表册才允许 0 条。
 
 在 plan 里给 `images` 数组，**每个 photo 页一条**（code / none 页不写）：
 
   "images": [
-    {"page": "P03", "filename": "p03_linchong.jpg", "subject": "林冲",
-     "purpose": "林冲人物画像", "query": "林冲 水浒传 绣像",
-     "query_en": "Lin Chong Water Margin woodcut"}
+    {"page": "P03", "filename": "p03_yuefei.jpg", "subject": "岳飞",
+     "purpose": "岳飞其人（画像；搜不到则降级为意象图）", "query": "岳飞 宋代 画像",
+     "query_en": "Yue Fei Song dynasty portrait",
+     "fallback": "中国 水墨 雪山 关隘",
+     "fallback_en": "Chinese ink snow mountain pass"},
+    {"page": "P05", "filename": "p05_snow_pass.jpg", "subject": "风雪荒原古城",
+     "purpose": "「怒发冲冠」的战场景象（意象图）", "query": "中国 水墨 风雪 荒原 古城",
+     "query_en": "Chinese ink painting snow wilderness ancient pass"}
   ]
 
 · 整册最多 8 条；photo 页每页一条。
-· `subject` 写要检索的**实体名**（人名/地名/器物名），必须带限定词：
-     ✓ 「雪夜山神庙」「戴枷林冲」「风雪荒原」
+· `subject` 写要检索的实体：**人物页就写人名**（岳飞/李清照/林冲），其他页写地名/景物/器物名。
+  都必须带限定词；**人物页必须额外给 `备选`**（详见上方配图规则）：
+     ✓ 「岳飞」+ 备选「水墨 雪山 关隘」
+     ✓ 「雪夜山神庙」「风雪荒原」「水墨 江舟」「青铜 鼎」
      ✗ 「古庙」「人物」「雪」——太泛，元数据只能命中泛词，会放进不相关的图。
   它同时是相关性硬门槛：取到的结果没有命中这个实体，就丢弃换源。
 · 只声明实体，不声明情节/动作（图库无法验证画面）：
-     ✗ 「宝玉摔玉的场景」 → ✓ 「贾宝玉人物小像」
+     ✗ 「宝玉摔玉的场景」 → ✓ 「古典园林 廊柱」
 · `query` / `query_en` **必须带限定词**，不能只写通用名词（否则图库只会按字面漂移）：
      ✗ 「洞箫 竹制 乐器」 → ✓ 「中国 洞箫 古画」
      ✗ 「月夜江舟」       → ✓ 「中国 水墨 月夜 江舟」
@@ -843,10 +867,12 @@ PLAN_PROMPT = """# 阶段 1：规划（Plan）
    以及这一页要承载的实质内容要点（3~6 条，要具体，不要占位符）。
 
 2a. **每页必须给 `visual` 字段**，声明这一页的视觉实现方式（决定要不要联网取图）：
-   `"visual": {{"mode": "photo", "subject": "林冲", "query_en": "Lin Chong Water Margin woodcut"}}`
+   `"visual": {{"mode": "photo", "subject": "风雪荒原古城", "query_en": "Chinese ink snow frontier pass"}}`
    mode ∈ `code`（函数图/几何/立体/公式/流程/数据/表格——代码画）、
-   `photo`（真实人物、实景、文物、版画、照片）、`none`（纯排版）。
+   `photo`（实景/文物/古画/版画/照片，**以及承载场景情绪的意象图**）、`none`（纯排版）。
    判定看「这一页是否指向现实世界的具体对象」；抽象关系一律 code。详见文末配图规则。
+   ⚠️ 文史/赏析类课件 **至少 2 页出 photo**（封面 + 至少一处场景）；人物页不配本人画像，
+   改配意象图（山水/风雪/古城/江舟/花卉/书法/古籍书影）。纯数学/理工册可全部 code。
 2b. **每页必须给一个 `figure` 字段，声明这一页要画的函数图像。** 这是把坐标算术交给
    代码的关键：你只声明“画什么”，代码会把曲线、切点、切线、割线的**全部 SVG 坐标**算好给你，
    你不需要（也不应该）自己算。取值：
@@ -2133,9 +2159,15 @@ class StagedRunner:
             query = str(item.get("query") or purpose).strip()
             query_en = str(item.get("query_en") or "").strip()
             subject = str(item.get("subject") or "").strip()
+            # 备选查询：人物页优先按人名搜，搜不到时用意象顶替（用户口径 2026-10-22）
+            fallback = str(item.get("fallback") or "").strip()
+            fallback_en = str(item.get("fallback_en") or "").strip()
             # subject 前缀供 P2.6 做「实体命中」硬门槛（Reference 里用 ｜ 分隔）
             reference = ((f"{subject}｜" if subject else "")
                          + (f"{query}（{query_en}）" if query_en else query))
+            if fallback:
+                reference += ("｜备选：" + (f"{fallback}（{fallback_en}）"
+                                          if fallback_en else fallback))
             try:
                 # acquire=web：图库检索；取不到时 run_image_phase 会降级 Needs-Manual
                 from image_pipeline import ensure_row as _ensure_row, parse_image_table as _parse
