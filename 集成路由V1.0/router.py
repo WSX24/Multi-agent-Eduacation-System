@@ -411,10 +411,6 @@ def handle_ppt(text: str, args, lib: PromptLib) -> None:
             cmd += ["--image-providers", args.image_providers]
         if args.no_image_strict:
             cmd += ["--no-image-strict"]
-        if args.image_websearch:
-            # 兜底图源：必应图片。产出的图授权未核实，只会备候选（Needs-Selection），
-            # 不会自动上版面 —— 但仍是**显式开启**才启用的。
-            cmd += ["--allow-websearch"]
     code = _run_pipeline_stream(cmd)
 
     # ③ 找最新 pptx 并命名归集
@@ -526,9 +522,6 @@ def main() -> int:
                     help="图库优先级，逗号分隔（默认 wikimedia,openverse,pexels,pixabay）")
     ap.add_argument("--image-max-candidates", type=int, default=8,
                     help="每张 web 图候选数上限（默认 8）")
-    ap.add_argument("--image-websearch", action="store_true",
-                    help="授权图源全部失败时，用必应图片搜一批**候选**（授权未核实，"
-                         "只落 images/candidates/ 等人工挑选，不会自动上版面）")
     ap.add_argument("--no-image-strict", action="store_true",
                     help="关闭相关性闸门（默认开启：图与查询对不上就丢弃）")
     # plan 分支

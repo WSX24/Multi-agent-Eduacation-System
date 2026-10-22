@@ -1066,271 +1066,6 @@ def fetch_shuge(project: Path, row: ImageRow, skill_dir: Path,
 
 
 # ---------------------------------------------------------------------------
-# 取图：浏览器搜图（必应图片）——**只产候选，绝不直接上版面**
-# ---------------------------------------------------------------------------
-# 为什么只产候选：浏览器搜到的图**授权不明**（花瓣/百科/个人站点/素材站）。
-# 现有 5 家图库的核心价值不是"能搜到"，而是授权清晰。所以这一路：
-#   · **默认关闭**，必须显式开（`--allow-websearch` / `--providers ...,websearch`）
-#   · 排在所有授权图源之后，只在前者全部失败时兜底
-#   · 产物落到 `images/candidates/<stem>/`，Status=Needs-Selection（终态，不阻断导出）
-#   · 附一张审图拼图 + candidates.json，人工挑一张再用
-BING_IMAGES = "https://cn.bing.com/images/search"
-WEB_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-          "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
-#: 候选图最小边长（比正式图源宽松，人工还要再看一眼）
-WEBSEARCH_MIN_SIDE = 500
-
-#: 一律不要的域名：电商 / 素材站 / 广告位 / 模板站。
-#: 实测（2026-10-22）：带空格的查询（如 `岳飞 古画`）会把必应结果整页变成商品图，
-#: 命中的全是 alicdn(1688) / suning / 素材站；这些图的授权和内容都不可用。
-WEBSEARCH_BLOCK_HOSTS = (
-    "alicdn", "1688.com", "taobao", "tmall", "jd.com", "suning", "aliexpress",
-    "amazon", "pinduoduo", "yangkeduo",
-    "699pic", "51miz", "znzmo", "dashangu", "tukuppt", "ppter", "doc88", "docin",
-    "adquan", "chuimg",
-)
-#: 每个域名最多留几张，避免结果被单一站点刷屏
-WEBSEARCH_PER_HOST = 2
-
-
-def _websearch_host(url: str) -> str:
-    return re.sub(r"^https?://", "", url or "").split("/")[0].lower()
-
-
-def _websearch_ok_host(url: str) -> bool:
-    host = _websearch_host(url)
-    return bool(host) and not any(b in host for b in WEBSEARCH_BLOCK_HOSTS)
-
-
-#: 结果项里的 JSON 载荷：m="{&quot;murl&quot;:...,&quot;purl&quot;:...,&quot;t&quot;:...}"
-#: 不绑 class 名 -- 必应的 class（iusc/iuscp/mimg）随版面和降级态会变。
-#: 用「m 后跟一段含 murl 的引号串」定位，避开页面里其它同名元数据。
-_BING_M_PAT = re.compile(r'm="([^"]*murl[^"]*)"')
-
-
-def _bing_image_urls(query: str, limit: int = 24,
-                     timeout: int = 25) -> List[Dict[str, str]]:
-    """抓必应图片结果页：原图直链（murl）+ 来源页（purl）+ **标题（t）**。
-
-    实现要点（都是踩出来的）：
-      · 只认带 `murl` 的那个 JSON 载荷，不拿裸 `murl` 正则乱抓 ——
-        后者会命中页面里「视觉搜索控件」的元数据，抓回来一堆无关图
-        （实测：岳飞画像 → 北方工业大学校徽）。
-      · 页面**退化**（被限流 / 无结果时只有 ~250KB 外壳）时直接返回空，
-        不猜、不从别处凑。宁可这一页没候选，也不要给一堆垃圾。
-    """
-    import html as _html
-    import requests
-
-    if not (query or "").strip():
-        return []
-    try:
-        r = requests.get(BING_IMAGES, params={"q": query, "form": "HDRSC2"},
-                         headers={"User-Agent": WEB_UA,
-                                  "Accept-Language": "zh-CN,zh;q=0.9",
-                                  "Referer": "https://cn.bing.com/"},
-                         timeout=timeout)
-        if not r.ok:
-            return []
-        page = r.text
-    except Exception:              # noqa: BLE001
-        return []
-
-    out: List[Dict[str, str]] = []
-    seen: set = set()
-    for raw in _BING_M_PAT.findall(page):
-        try:
-            d = json.loads(_html.unescape(raw))
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if not isinstance(d, dict):
-            continue
-        url = str(d.get("murl") or "").strip()
-        if not url.lower().startswith(("http://", "https://")) or url in seen:
-            continue
-        seen.add(url)
-        out.append({"url": url,
-                    "page": str(d.get("purl") or ""),
-                    "title": str(d.get("t") or "")})
-        if len(out) >= limit:
-            break
-    return out
-
-
-def _sniff_ext(data: bytes) -> str:
-    """按文件头判断扩展名（不依赖已废弃的 imghdr）。"""
-    if data[:3] == bytes([0xFF, 0xD8, 0xFF]):
-        return ".jpg"
-    if data[:8] == bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]):
-        return ".png"
-    if data[:4] == bytes([0x52, 0x49, 0x46, 0x46]) and data[8:12] == bytes([0x57, 0x45, 0x42, 0x50]):
-        return ".webp"
-    if data[:3] == bytes([0x47, 0x49, 0x46]):
-        return ".gif"
-    return ""
-
-def _contact_sheet(files: Sequence[Path], out: Path, cols: int = 4,
-                   thumb: int = 320) -> bool:
-    """把候选图拼成一张带编号的审图图；PIL 不可用时返回 False（不影响主流程）。"""
-    try:
-        from PIL import Image, ImageDraw
-    except Exception:              # noqa: BLE001
-        return False
-    thumbs = []
-    for f in files:
-        try:
-            im = Image.open(f)
-            im.thumbnail((thumb, thumb))
-            thumbs.append((f.name, im.convert("RGB")))
-        except Exception:          # noqa: BLE001
-            continue
-    if not thumbs:
-        return False
-    rows = (len(thumbs) + cols - 1) // cols
-    cell_w = max(im.width for _, im in thumbs) + 12
-    cell_h = max(im.height for _, im in thumbs) + 26
-    sheet = Image.new("RGB", (cols * cell_w, rows * cell_h), (250, 250, 250))
-    draw = ImageDraw.Draw(sheet)
-    for i, (name, im) in enumerate(thumbs):
-        x = (i % cols) * cell_w + 6
-        y = (i // cols) * cell_h + 20
-        sheet.paste(im, (x, y))
-        draw.text((x, y - 14), name[:16], fill=(20, 20, 20))
-    try:
-        sheet.save(out, quality=88)
-        return True
-    except Exception:              # noqa: BLE001
-        return False
-
-
-def fetch_websearch(project: Path, row: ImageRow, skill_dir: Path,
-                    max_candidates: int = 8, timeout: int = 30) -> FetchResult:
-    """必应图片搜一批**候选**（授权不明 → 只备份、绝不上版面）。
-
-    返回 needs_selection=True（Needs-Selection 是终态，不阻断导出）。
-    """
-    import requests
-
-    main_query, variants = split_query_variants(row.reference)
-    subject = ""
-    if "｜" in (row.reference or ""):
-        subject = _core_subject((row.reference or "").split("｜", 1)[0])
-    # 检索词怎么拼很关键（实测）：带空格的中文查询会把必应整页变成商品结果。
-    # 所以中文一律用**紧凑写法**「实体 + 一个题材词」，例如「岳飞画像」。
-    zh_terms, _, _ = _reference_terms(row.reference or "")
-    qualifier = next((x for x in zh_terms if x in ("画像", "肖像", "古画", "国画", "书法")), "")
-    if not qualifier:
-        qualifier = zh_terms[0] if zh_terms else ""
-    queries: List[str] = []
-    if subject:
-        # 「实体+画像」是实测命中率最高的写法，放第一个
-        queries.append(f"{subject}画像")
-        # 拼出来等于「实体+实体」的退化查询直接不要（会把结果带跑）
-        if qualifier and qualifier not in (subject, "画像"):
-            queries.append(f"{subject}{qualifier}")
-    for q in ([main_query.replace(" ", "")] if main_query else []) + list(variants):
-        q = (q or "").strip()
-        if q and q not in queries:
-            queries.append(q)
-    if not queries:
-        return FetchResult(False, "浏览器搜图：没有可用检索词")
-
-    cand_dir = project / "images" / "candidates" / Path(row.filename).stem
-    cand_dir.mkdir(parents=True, exist_ok=True)
-    found: List[Dict[str, str]] = []
-    seen_urls: set = set()
-    host_count: Dict[str, int] = {}
-    # 逐个查询取，取够就停：必应连续打会退化成空壳页（实测），
-    # 少打一次就少一次退化机会。每个候选先按标题过相关性，命中才算数。
-    def _relevant(item: Dict[str, str]) -> bool:
-        """标题/来源页里必须有**整词**命中。
-
-        这里故意不用 `_zh_hits` 的「2 字前缀也算中」规则：那条规则是为中文标签
-        留的救济，用在必应标题上会立刻失控 —— 实测「中国古代战车」的 2 字前缀
-        「中国」把一堆**中国地图**、长城照片放进了战车的候选里。
-        """
-        text = f"{item.get('title') or ''} {item.get('page') or ''}"
-        if subject and subject in text:
-            return True
-        terms, _, _ = _reference_terms(row.reference or "")
-        strict = [x for x in terms if x in text]
-        return bool(strict) and not all(_mood_term(x) for x in strict)
-
-    import time as _t
-    for qi, q in enumerate(queries[:3]):
-        if qi:
-            _t.sleep(0.6)                 # 拉开间隔，降低被限流概率
-        for item in _bing_image_urls(q, limit=max_candidates * 3, timeout=timeout):
-            url = item["url"]
-            if url in seen_urls or not _websearch_ok_host(url):
-                continue
-            host = _websearch_host(url)
-            if host_count.get(host, 0) >= WEBSEARCH_PER_HOST:
-                continue
-            if not _relevant(item):       # 标题里一个需求词都不中 → 直接丢
-                continue
-            seen_urls.add(url)
-            host_count[host] = host_count.get(host, 0) + 1
-            found.append(item)
-        if len(found) >= max_candidates * 2:
-            break
-    if not found:
-        return FetchResult(False, "浏览器搜图：必应无结果或全是电商/素材站（已过滤）")
-
-    if not found:
-        return FetchResult(False, "浏览器搜图：必应返回的结果标题都不含需求词"
-                                  "（多半是被限流退化了，稍后重试或换图源）")
-    # 命中词多的排前面
-    _terms, _, _ = _reference_terms(row.reference or "")
-    found.sort(key=lambda it: -sum(
-        1 for x in _terms if x in f"{it.get('title') or ''} {it.get('page') or ''}"))
-
-    saved: List[Path] = []
-    meta: List[Dict[str, object]] = []
-    for i, item in enumerate(found[: max_candidates * 3], 1):
-        if len(saved) >= max_candidates:
-            break
-        try:
-            r = requests.get(item["url"], headers={"User-Agent": WEB_UA, "Referer": item.get("page") or ""},
-                             timeout=timeout)
-        except Exception:          # noqa: BLE001
-            continue
-        if not r.ok or len(r.content) < 20000:
-            continue
-        ext = _sniff_ext(r.content)
-        if not ext:
-            continue
-        dst = cand_dir / f"{len(saved) + 1:02d}{ext}"
-        dst.write_bytes(r.content)
-        size = probe_size(dst)
-        if not size or min(size) < WEBSEARCH_MIN_SIDE:
-            dst.unlink(missing_ok=True)
-            continue
-        saved.append(dst)
-        meta.append({"file": dst.name, "url": item["url"], "page": item.get("page") or "",
-                     "width": size[0], "height": size[1],
-                     "host": re.sub(r"^https?://", "", item["url"]).split("/")[0]})
-
-    if not saved:
-        return FetchResult(False, "浏览器搜图：候选均下载失败或尺寸过小")
-
-    sheet = cand_dir / "review_sheet.jpg"
-    has_sheet = _contact_sheet(saved, sheet)
-    try:
-        (cand_dir / "candidates.json").write_text(json.dumps({
-            "warning": "浏览器搜图结果，授权未核实，仅供人工挑选；请勿直接商用",
-            "queries": queries[:3],
-            "items": meta,
-        }, ensure_ascii=False, indent=1), encoding="utf-8")
-    except OSError:
-        pass
-    where = f"{cand_dir}（审图 {sheet.name if has_sheet else '未生成'}）"
-    return FetchResult(False,
-                       f"浏览器候选 {len(saved)} 张，待人工挑选：{where}",
-                       "websearch", needs_selection=True)
-
-
-# ---------------------------------------------------------------------------
 # 取图：The Met 开放数据（纽约大都会博物馆，零 key，CC0）
 # ---------------------------------------------------------------------------
 # 为什么加它：Pixabay/书格 都没有「仕女 / 花鸟 / 山水 / 楼阁」这类中国古画的
@@ -1948,8 +1683,8 @@ def _provider_order_for(row: ImageRow, default: Sequence[str]) -> List[str]:
     else:
         order = base
     picked = [p for p in order if p in base]
-    # 硬编码顺序里没列到的图源（如兜底的 websearch）不能就此丢掉 ——
-    # 2026-10-22 实测：加了 websearch 后它被这里的过滤整个吃掉，压根没跑过。
+    # 硬编码顺序里没列到的图源不能就此丢掉 ——
+    # 2026-10-22 实测：新加的图源若没登记进上面的顺序表，会被这里整个过滤掉，压根不跑。
     picked += [p for p in base if p not in picked]
     return picked or base
 
@@ -2439,7 +2174,6 @@ _PROVIDER_HOSTS: Dict[str, tuple] = {
     "pixabay": ("pixabay.com", 443),
     "shuge": ("www.shuge.org", 443),
     "met": ("collectionapi.metmuseum.org", 443),
-    "websearch": ("cn.bing.com", 443),
 }
 _REACH_CACHE: Dict[str, bool] = {}
 _REACH_LOCK = threading.Lock()
@@ -2635,8 +2369,6 @@ def run_image_phase(project: Path, skill_dir: Path,
                     result = fetch_pixabay(project, row, skill_dir, max_candidates=max_candidates)
                 elif provider == "met":
                     result = fetch_met(project, row, skill_dir, max_candidates=max_candidates)
-                elif provider == "websearch":
-                    result = fetch_websearch(project, row, skill_dir, max_candidates=max_candidates)
                 else:
                     override = ""
                     if (arts_row and provider in ("wikimedia", "openverse")
@@ -3050,10 +2782,6 @@ def main() -> int:
                     help=f"临时覆盖 P2 加权阈值（默认 {P2_PASS}），配合 --audit-p2 标定用")
     ap.add_argument("--no-p2-diag", action="store_true",
                     help="关闭取图时的 P2 加权只读诊断日志（默认开）")
-    ap.add_argument("--allow-websearch", action="store_true",
-                    help="启用「浏览器搜图」兜底（必应图片）。"
-                         "产出的图**授权未核实**，只会落到 images/candidates/ 并置 "
-                         "Needs-Selection 等人工挑选，绝不自动上版面。默认关闭")
     ap.add_argument("--selftest", action="store_true",
                     help="跑配图验收的内置回归用例（不联网、不改项目）；改验收规则前先跑")
     args = ap.parse_args()
@@ -3110,9 +2838,6 @@ def main() -> int:
         return 0
 
     provs = tuple(p.strip() for p in args.providers.split(",") if p.strip())
-    if args.allow_websearch and "websearch" not in provs:
-        # 兜底图源：排在所有授权图源之后
-        provs = provs + ("websearch",)
     report = run_image_phase(
         project, skill_dir, source=args.image_source,
         providers=provs,
