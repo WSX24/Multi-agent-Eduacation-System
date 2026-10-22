@@ -919,22 +919,25 @@ SHUGE_TEXT_PAGES: Dict[str, set] = {
 #: （`FetchResult.trusted`），但仍要过风格闸门（现代痕迹/建筑否决）。
 #: 键是正则（匹配 Reference + Purpose 全串），值是 (书页, 标签)。
 SHUGE_INTENT_BOOKS: List[tuple] = [
-    (r"雪|寒林|关山|关隘|边塞|塞外|征战|沙场",
+    # ⚠️ 这里的正则**必须是两字以上的词**（2026-10-22 事故）：
+    # 原来写单字 `水`，结果「水墨 昆虫 草地」因为含「水」命中「江舟」组，
+    # 把《龙池竞渡图卷》的引首题字页配到了「蜂儿、蚂蚁、瓢虫」这一页上——货不对板。
+    (r"雪山|雪景|积雪|寒林|关山|关隘|边塞|塞外|征战|沙场",
      [("https://www.shuge.org/view/guan_shan_ji_xue_tu_juan/", "关山积雪图卷"),
       ("https://www.shuge.org/view/xi_shan_xue_yi_tu_juan/", "溪山雪意图卷")]),
-    (r"山水|远山|群峰|溪山|画卷|长卷|烟雨|楼阁|亭台",
+    (r"山水|远山|群峰|溪山|画卷|长卷|手卷|烟雨|楼阁|亭台|舟楫",
      [("https://www.shuge.org/view/xia_shan_yu_yu_tu_juan/", "夏山欲雨图卷"),
       ("https://www.shuge.org/view/tian_xia_ming_shan_tu/", "天下名山图册")]),
-    (r"江|舟|渡|水|汀|烟波|渔",
+    (r"江舟|扁舟|小舟|渡口|竞渡|烟波|渔舟|汀洲",
      [("https://www.shuge.org/view/long_chi_jing_du_tu_juan/", "龙池竞渡图卷")]),
-    (r"园林|山庄|庭院|廊|寺|庙",
+    (r"园林|山庄|庭院|回廊|古寺|寺庙|亭台",
      [("https://www.shuge.org/view/yu_zhi_bi_shu_shan_zhuang_shi_tu_ce/", "御制避暑山庄诗图册")]),
-    (r"花|落红|折枝|春|桃|柳|兰|梅|荷",
+    (r"折枝|花卉|落红|花鸟|桃夭|杨柳|兰竹|梅花|荷花|牡丹",
      [("https://www.shuge.org/view/song_yuan_ming_ren_hua_niao_he_bi/", "宋元明人花鸟合璧"),
       ("https://www.shuge.org/view/shi_er_yue_hua_shen_ce/", "十二月花神册")]),
-    (r"仕女|闺|梳妆|对镜|女子|秋千",
+    (r"仕女|闺阁|梳妆|对镜|秋千|簪花",
      [("https://www.shuge.org/view/shi_nv_tu_ce/", "诗女图册")]),
-    (r"月|秋|四时|晨|暮",
+    (r"四时|暮色|黄昏|晨雾|月色|幽赏",
      [("https://www.shuge.org/view/si_shi_you_shang/", "四时幽赏")]),
 ]
 
@@ -985,15 +988,21 @@ def _shuge_probes(query: str) -> List[str]:
     return [p for p in probes if p]
 
 
-def search_shuge(query: str, limit: int = 3) -> List[Dict[str, str]]:
-    """搜书格：先找书（文章），再从书页里抽原图直链。返回候选列表。"""
+def search_shuge(query: str, limit: int = 3, use_index: bool = True) -> List[Dict[str, str]]:
+    """搜书格：先找书（文章），再从书页里抽原图直链。返回候选列表。
+
+    `use_index=False`：不查「意象 → 书页」人工索引。
+    **非古画行必须传 False**（2026-10-22 事故：现代散文《我与地坛》P12 要「暮色园林」的
+    实景照，却因「暮色」命中索引，被配了一页《四时幽赏》古籍图）。
+    """
     import requests
 
     out: List[Dict[str, str]] = []
     posts: List[dict] = []
-    # ① 人工索引：意象 → 书页（最准，优先）
-    for url, title in _shuge_index_books(query):
-        posts.append({"url": url, "title": title, "_indexed": True})
+    # ① 人工索引：意象 → 书页（最准，优先）——只给古画行用
+    if use_index:
+        for url, title in _shuge_index_books(query):
+            posts.append({"url": url, "title": title, "_indexed": True})
     # ② 常规检索（词命中差，逐级回退）。索引已经给书了就不再多此一举。
     if not posts:
         probes = _shuge_probes(query)
@@ -1068,7 +1077,7 @@ def fetch_shuge(project: Path, row: ImageRow, skill_dir: Path,
 
     query = (row.reference or "").strip()
     query = VARIANT_RE.sub("", query).strip() or row.get("Purpose") or row.filename
-    candidates = search_shuge(query)
+    candidates = search_shuge(query, use_index=_wants_painting(row))
     if not candidates:
         return FetchResult(False, "书格：无搜索结果")
 
@@ -2368,7 +2377,8 @@ def _local_is_art(item: Dict[str, object]) -> bool:
     return bool(_LOCAL_ART_TITLE_RE.search(text))
 
 
-def fetch_local(project: Path, row: ImageRow, paint_only: bool = False) -> FetchResult:
+def fetch_local(project: Path, row: ImageRow, paint_only: bool = False,
+                allow_art: bool = True) -> FetchResult:
     """先查本地库：命中就直接复制，不走网络。
 
     本地库存的是 PD 古画/版画和已下载的 Pixabay 图——「林冲」「雪山」这类
@@ -2400,6 +2410,15 @@ def fetch_local(project: Path, row: ImageRow, paint_only: bool = False) -> Fetch
         if not kept:
             return FetchResult(
                 False, f"本地库命中 {len(matches)} 条但全是实景照片（本行要古画/水墨）")
+        matches = kept
+    elif not allow_art:
+        # 非古画行（现代散文/纪实/实景需求）：本地库的古画不能上版面。
+        # 2026-10-22 事故：《我与地坛》P08「母亲在园中小径张望」被配上
+        # 《御制避暑山庄诗图册》（空园林全景），subject 只命中了「园林」二字。
+        kept = [m for m in matches if not _local_is_art(m)]
+        if not kept:
+            return FetchResult(
+                False, f"本地库命中 {len(matches)} 条古画，本行要实景，留给联网图库")
         matches = kept
 
     deck_key = str(project.resolve())
@@ -2516,7 +2535,8 @@ def run_image_phase(project: Path, skill_dir: Path,
 
             def _attempt(alt: ImageRow) -> FetchResult:
                 """把一行（或它的备选查询）对所有图源跑一遍，返回值不抛异常。"""
-                local_result = fetch_local(project, alt, paint_only=want_paint)
+                local_result = fetch_local(project, alt, paint_only=want_paint,
+                                           allow_art=want_paint)
                 result = FetchResult(False, "未尝试")
                 providers_try = _provider_order_for(
                     alt,
