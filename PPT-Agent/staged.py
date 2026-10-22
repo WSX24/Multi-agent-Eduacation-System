@@ -1490,10 +1490,17 @@ class StagedRunner:
             return files
 
         saved = self._save_parse_failure(label, raw)
-        self._log(
-            f"   ⚠️ 未解析到 {missing}；原始输出已存到 "
-            f"{saved.relative_to(self.skill_dir) if saved else '（存盘失败）'}"
-        )
+        # 存盘路径在**项目目录**下，不在 skill_dir 下；以前无条件 relative_to(skill_dir)
+        # 会抛 ValueError，把「模型格式没对上→重试一次」变成整跑崩溃。
+        # 2026-10-22 荷塘月色那次就是死在这里（P2 FREEZE，退出码 1，一页 SVG 都没产）。
+        if saved is None:
+            where = "（存盘失败）"
+        else:
+            try:
+                where = str(saved.relative_to(self.skill_dir))
+            except ValueError:
+                where = str(saved)
+        self._log(f"   ⚠️ 未解析到 {missing}；原始输出已存到 {where}")
         retry_prompt = (
             "你上一条输出里没有可解析的文件块。解析失败的原始输出已保存供排查。\n"
             f"请**只**输出下面这个格式，每个文件一个块，标签必须完整闭合：\n\n"

@@ -952,3 +952,42 @@ Pixabay/书格 都没有「仕女/花鸟/山水/竹石」这类中国古画的�
 讲稿与页面说明同步重导。备份在 `/tmp/yf_backup2/`。
 
 取舍：一张错的图比没有图更糟。这册本来就要的是史料考据图，图源覆盖不到。
+
+---
+
+## 全流程实测（2026-10-22）：跑通，但先修了一个硬崩的 bug
+
+### 实测结果
+
+| 任务 | 结果 |
+|---|---|
+| 8 页《一次函数》 | ✅ 206s、16 次模型调用，pptx + 讲稿 + 页面说明齐出（8 页 / 8 备注 / 0 配图，数学类正确） |
+| 8 页《荷塘月色》第一次 | ❌ **退出码 1，一页 SVG 都没产** |
+| 8 页《荷塘月色》修完重跑 | ✅ 147s、17 次调用，8 页 / 8 备注，`0 blocking` |
+
+### 崩在哪（**与配图改动无关的旧 bug**）
+
+```
+File "staged.py", line 1495, in _ask_files
+    f"{saved.relative_to(self.skill_dir) ...}"
+ValueError: '...\validation\_parse_failure_fill_spec.txt'
+            is not in the subpath of '...\ppt-master\skills\ppt-master'
+```
+
+`_ask_files` 在模型输出没按格式给文件块时，会把原始输出存到 **项目目录** 下的
+`validation/_parse_failure_*.txt`，然后无条件 `relative_to(skill_dir)` 拼日志 ——
+两者不在同一棵树下，直接抛 `ValueError`。
+
+后果很重：**"模型格式没对上 → 本来只该重试一次"** 变成了 **整跑崩溃、零产出**，
+而且停在 P2 FREEZE，连 SVG 都没开始写。
+
+### 修法
+
+`relative_to` 包进 `try/except ValueError`，失败就退化成绝对路径。
+`agent.py:694` 那处同类调用是 `skill_dir.glob()` 出来的路径，恒为该目录子路径，不用改。
+
+### 观察（未改，待定）
+
+《荷塘月色》这一册 §VIII 是**空表** —— 散文主题居然一张配图都没声明。
+不是崩溃，是 P1/P2 的判断。可能是新加的「考据图/人物肖像不声明配图」那条
+让模型过度保守了；也可能它把所有页判成了 `mode=code`。下次跑散文类需要盯一眼。
