@@ -316,6 +316,7 @@ P3 慢 4 倍。详见 `PPT-Agent/LOCKED-DEFAULTS.md`。
 | ⑨ 古画行不吃实景照 | `Type=Painting` 或 Reference 写了水墨/古画/长卷的行：跳过 pixabay/pexels；本地库按**来源域名**判（shuge/met/commons=画，pixabay/pexels=照，不看文件名——`art_lotus_pond.jpg` 其实是 Pixabay 照片） |
 | ⑩ 古画源放宽实体门槛 | 中文意象词「山河朝阳」↔ 英文藏品名「River Hamlet」必然 0 命中，实测 Met 相关度 1.00 的水墨山水被「实体未命中」拒掉。书格/Met/本地库改为词覆盖 + 风格闸门 |
 | ⑪ 意象 → 书名索引 | 书格按书名检索，搜「雪山关隘」只会返回《王孟津赠汤若望诗册》（书法），真正的雪景山水叫《关山积雪图卷》。`SHUGE_INTENT_BOOKS` 人工点单，命中后该图免文字闸门（`FetchResult.trusted`） |
+| ⑬ 地名必须命中 | Reference 点名了地名（北京/北平/地坛/西湖…）时，结果元数据必须出现该地名（中/英别名均可）。事故：北平的秋封面因标签只有「秋天」配到西方小女孩秋千照；地坛被配成天坛。测试：`地坛` vs `Temple of Heaven` 判拒 |
 | ⑫ 索引书去头去尾 | 手卷前后是引首/题跋（满纸书法）。旧的固定偏移 `SHUGE_SKIP_FRONT=7` 用在 9 页小卷上会跳到跋文——封面变成一整屏书法 |
 
 **仍未覆盖**

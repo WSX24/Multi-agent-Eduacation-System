@@ -2244,9 +2244,67 @@ def _style_mismatch(probe_text: str) -> bool:
     return any(k in text or k in tl for k in _MODERN_HARD_HINTS)
 
 
+#: 地名组：第一项是中文写法（含旧称），第二项是英文别名。
+#: 为什么需要地名硬门槛（2026-10-22 事故）：
+#:   《北平的秋》封面 Reference 写了「北京 胡同 秋天 金黄」，结果配了一张
+#:   **西方小女孩在秋千上**——因为那张图的标签里有「秋天」两个字，而闸门从不要求
+#:   结果里出现「北京」。同一个洞还导致过《我与地坛》封面被配成天坛、古镇。
+#:   做法：只要 Reference 里点名了地名，结果元数据就必须命中该地名（中/英均可）。
+_PLACE_GROUPS: List[tuple] = [
+    (("北京", "北平", "燕京"), ("beijing", "peking", "peiping")),
+    (("西安", "长安"), ("xi'an", "xian", "chang'an")),
+    (("南京", "金陵", "建康"), ("nanjing",)),
+    (("杭州", "临安"), ("hangzhou",)),
+    (("苏州", "姑苏"), ("suzhou",)),
+    (("扬州",), ("yangzhou",)),
+    (("洛阳", "汴京", "开封"), ("luoyang", "kaifeng")),
+    (("济南",), ("jinan",)),
+    (("成都", "锦官城"), ("chengdu",)),
+    (("重庆",), ("chongqing",)),
+    (("武汉",), ("wuhan",)),  # 不放「江城」：会命中词牌《江城子》
+    (("长沙",), ("changsha",)),
+    (("昆明",), ("kunming",)),
+    (("拉萨", "吐蕃"), ("lhasa",)),
+    (("敦煌", "莫高窟"), ("dunhuang",)),
+    (("江南",), ("jiangnan",)),
+    (("西湖",), ("west lake",)),
+    (("地坛",), ("temple of earth", "ditan")),
+    (("天坛",), ("temple of heaven", "tiantan")),
+    (("故宫", "紫禁城"), ("forbidden city",)),
+    (("长城",), ("great wall",)),
+    (("泰山",), ("mount tai", "taishan")),
+    (("黄河",), ("yellow river",)),
+    (("长江",), ("yangtze",)),
+]
+
+
+def _place_required(reference: str) -> tuple:
+    """Reference 里点名了哪个地名（返回命中最早的那组）；没点名返回空元组。"""
+    text = reference or ""
+    for zh, en in _PLACE_GROUPS:
+        if any(t in text for t in zh):
+            return (zh, en)
+    return ()
+
+
+def _place_hit(reference: str, probe_text: str) -> bool:
+    """地名硬门槛：点名的地名必须出现在结果元数据里（中/英任一写法）。
+
+    没点名地名时一律放行（不改变其他题材的行为）。
+    """
+    need = _place_required(reference)
+    if not need:
+        return True
+    zh, en = need
+    text = _norm_cjk(probe_text or "")
+    tl = text.lower()
+    if any(t in text for t in zh):
+        return True
+    return any(a in tl for a in en)
+
+
 def _entity_hit(reference: str, probe_text: str) -> bool:
     """实体硬门槛：Reference 的 `实体｜查询` 前缀必须命中结果元数据。
-
     没有 `｜`（旧格式）时不做限制，保持向后兼容。
     中文实体允许 2 字片段命中（如「林冲」）；英文按 query_en 的词命中（≥1 个）。
     2026-10-19 事故：书格《水浒传》整书第 9 页（武松打虎）被当成林冲画像，
@@ -2605,6 +2663,15 @@ def run_image_phase(project: Path, skill_dir: Path,
                         # 例：《关山积雪图卷》对应「雪山关隘古道」，字上一个词不重合。
                         # **风格闸门仍在下面生效**：索引只免除「对不对得上」，不免「像不像」。
                         entity_ok = True
+                    # 地名硬门槛：Reference 点名了地名（北京/北平/地坛…），
+                    # 结果元数据就必须出现它。2026-10-22：北平的秋封面因此配到
+                    # 一张西方小女孩秋千照（标签里只有「秋天」）。
+                    place_need = _place_required(alt.reference or "")
+                    if place_need and not _place_hit(alt.reference or "", probe_text):
+                        entity_ok = False
+                        why_place = f"地名不符（本行要求出现「{place_need[0][0]}」）"
+                    else:
+                        why_place = ""
                     if arts_row and _style_mismatch(probe_text):
                         entity_ok = False
                         why_style = "风格不符（水墨/古画需求命中现代/照片特征）"
@@ -2624,7 +2691,8 @@ def run_image_phase(project: Path, skill_dir: Path,
                         break
                     (project / "images" / alt.filename).unlink(missing_ok=True)
                     _remove_source_record(project, alt.filename)
-                    why = (why_style if why_style
+                    why = (why_place or why_style
+                           if (why_place or why_style)
                            else f"相关度 {score:.2f} < {MIN_RELEVANCE}"
                            if score < MIN_RELEVANCE
                            else "实体未命中（结果里没有该人物/器物）")
