@@ -253,19 +253,19 @@ def test_ppt_general_enum_inputs_validated():
 
 
 def test_ppt_general_scene_skeleton_enforced():
-    """场景骨架落地：整体结构里缺骨架词时应被检出（防止 5 场景套成同一套结构）。"""
+    """场景骨架落地：整体结构里缺骨架词时应被检出（防止套成别的结构）。"""
     data = yaml.safe_load(
         (ROOT / "fewshots" / "ppt_general.yaml").read_text(encoding="utf-8")
     )
     good = data["examples"][0]["output"]
-    # 把汇报范文的整体结构改写为「背景→内容→结论」，命不中汇报骨架词
+    # 把教学范文的整体结构改写为「背景→内容→结论」，命不中教学骨架词
     tampered = re.sub(
         r"2\. 【整体结构】[^\n]*",
         "2. 【整体结构】三部分：背景 → 内容 → 结论。逻辑线：先背景、再内容、最后结论。",
         good,
     )
-    case = {"场景": "汇报", "主题": "智能客服系统年度商业化汇报",
-            "受众": "老板", "页数要求": "10"}
+    case = {"场景": "教学", "主题": "全等三角形的判定",
+            "受众": "学生", "页数要求": "8"}
     failed = [n for n, ok, _ in validate_ppt_general(
         tampered, case, check_contamination=False) if not ok]
     assert any("场景骨架落地" in n for n in failed), f"场景骨架丢失未被检出：{failed}"

@@ -582,3 +582,106 @@ python agent.py --provider deepseek "..."      # 临时指定
    `svg_quality_checker.py`。默认用 `openai/gpt-4o`，可换更强的模型。
 5. **图片生成/搜索需要额外凭据**。见 `<SKILL_DIR>/.env.example`；未配置时按 skill 的
    「no-AI replan」规则降级为原生图形，不会中断流程。
+
+---
+
+## 9. 配图（P2.6 IMAGES）
+
+默认 **关闭**：不传 `--image-source` 时，行为与之前**完全一致**（所有图都由 SVG 原生绘制）。
+
+开启后，流水线多一个 **P2.6 取图**阶段（纯代码，不调模型）：
+
+```
+P1 规划 → P2 冻结(写 §VIII 图片行) → P2.6 取图 → P3 逐页写 SVG → P4 修 → P5 导出
+```
+
+### 用法
+
+```bash
+# 联网取图（走 Wikimedia/Openverse/Pexels/Pixabay）
+python agent.py --image-source web "做一份 8 页的《宝黛初会》PPT"
+
+# 按 §VIII 每行的声明走（web 行搜图、ai 行生图）
+python agent.py --image-source auto "做一份 8 页的《宝黛初会》PPT"
+
+# 只备候选、等人挑（最稳）
+python agent.py --image-source web --image-review manual "..."
+
+# pipeline / run_unit_ppt / router 都有同名参数
+python pipeline.py "做一份 8 页的《宝黛初会》PPT" --image-source auto
+python router.py "做一份 8 页的《宝黛初会》PPT"          # router 默认 auto
+```
+
+### 谁负责什么
+
+| 环节 | 谁做 |
+|---|---|
+| 判断某页要不要真实影像 | 模型（P2 写 §VIII 行） |
+| `Reference` 的中文意图 + 括号英文关键词 | 模型 |
+| 搜图 / 生图 / 重试 / provider 回退 | **代码**（`image_pipeline.py`） |
+| `Dimensions` / `Ratio` / `Status` 回填 | **代码**（按真实文件算） |
+| `spec_lock.md` 的 `## images` 投影 | **代码** |
+| 失败降级为 `Needs-Manual`、该页退回 SVG | **代码** |
+
+模型只填「意图」，机械列一律由代码覆盖——这样 §VIII / spec_lock / SVG 三处才可能对齐（校验器会交叉核对）。
+
+### 审图三档（`--image-review`）
+
+| 档位 | 行为 | 适用 |
+|---|---|---|
+| `auto` | 脚本按元数据直选 | 快，但实测会把「书的封面照」排第一 |
+| `score`（默认） | 拉 6~8 张候选 → 元数据评分 → promote 最高分 | 基本可用，仍建议抽查 |
+| `manual` | 只拉候选 + 生成审图拼图，`Status=Needs-Selection`，等人选 | 正式交付 |
+
+评分只是「排废图」不是「选好图」：它把 `cover/binding/scan/展柜` 这类标题大幅负分，
+把「作者 - 作品名」式的博物馆命名图和公有领域图提上来。**真正的把关仍然需要看一眼。**
+
+### 契约（动了会报 blocking）
+
+- §VIII 行：`Status` 必须是终态（web → `Sourced`/`Needs-Manual`）；`Crop Policy ∈ {adaptive, no-crop}`；`Image pattern` 非空
+- `spec_lock.md`：`- p01: images/x.jpg | source=web | crop=adaptive`（`source` 小写且等于 §VIII 的 `Acquire Via`）
+- SVG：`<image href="images/x.jpg">`；`attribution-required` 的图必须在页面上渲染可见署名
+
+### 单独跑 / 重跑 P2.6
+
+```bash
+python image_pipeline.py <project_path> --image-source web --image-review score
+python check_image_sources.py          # 体检：哪些图库/生图后端在本机可用（不花钱）
+```
+
+### 已知限制
+
+- `ai` 分支需要 `IMAGE_BACKEND` + 对应 key；没配时只写 `images/image_prompts.json` 并标 `Needs-Manual`
+- 网络抖动会让图库偶发超时（实测同一站点时而 30s 超时、时而 1s 返回），所以带重试与 provider 回退
+- 中文关键词在 Pexels/Pixabay 命中率低，`Reference` 末尾的英文括号变体是关键
+
+### 从外部直链入库（不靠图库 API）
+
+搜图这一步也可以由**能看见图的人/工具**完成（浏览器、搜索框、模型侧的 web search），
+选定的图用一条命令入库，它会自动补齐 §VIII 行 + `spec_lock ## images` + 溯源：
+
+```bash
+python image_pipeline.py <project_path> \
+  --add "宝黛初会.jpg=https://example.com/xxx.jpg" \
+  --page "P03 宝黛初会" --purpose "封面主视觉"
+```
+
+- 无需任何图库 key，也无需代理——只要该图床**直连可达**即可。
+- 实测国内可达：中华珍宝馆(ltfc.net)、故宫(digicol.dpm.org.cn)、
+  百度百科图床(bkimg.cdn.bcebos.com)、花瓣(gd-hbimg.huaban.com)、
+  Pexels/Pixabay 的 CDN。
+- 溯源档位记为 `manual`（权利与署名由使用者自负），页面不强制署名。
+
+### 图源优先级（2026-10 实测）
+
+| provider | 直连 | 需要 | 适用 |
+|---|---|---|---|
+| **shuge（书格）** | ✅ 0.1s | 无 | 中国古画/古籍/红楼梦图咏等 |
+| **pexels** | ✅ 0.8s | 免费 key | 实拍：器材、地貌、场景、人物 |
+| **pixabay** | ✅ 0.5s | 免费 key | 实拍 + 插画/矢量 |
+| wikimedia | ❌ 需代理 | 代理 | 教学示意图（英文标注）、公版艺术 |
+| openverse | ❌ 需代理 | 代理 | 聚合检索 |
+
+**书格接法**：走它的 WordPress REST API（`/wp-json/wp/v2/search`）找书，再从书页抽原图直链。
+默认跳过前 7 幅（装帧/扉页/题咏），实测这样能落到人物图。授权为 CC BY-NC 4.0
+（教学/非商用可用，建议页面署名「改琦《红楼梦图咏》，书格 shuge.org」）。

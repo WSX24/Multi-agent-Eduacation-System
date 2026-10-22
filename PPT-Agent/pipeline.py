@@ -220,25 +220,17 @@ LEVEL_SYNONYMS = {
     "奥赛": "竞赛", "竞赛班": "竞赛", "尖子": "竞赛",
 }
 
-# —— ppt_general：受众 / 场景 ——
-AUDIENCES = ("老板", "客户", "同事", "学生", "投资人", "评审专家")
-SCENARIOS = ("汇报", "路演", "教学", "答辩", "产品介绍")
+# —— ppt_general：受众 / 场景（已收敛为教学专用：受众=学生、场景=教学）——
+AUDIENCES = ("学生",)
+SCENARIOS = ("教学",)
 AUDIENCE_SYNONYMS = {
-    "领导": "老板", "老总": "老板", "高管": "老板", "管理层": "老板", "上级": "老板",
-    "甲方": "客户", "用户": "客户", "客户方": "客户", "业主": "客户",
-    "团队": "同事", "组内": "同事", "伙伴": "同事",
     "学员": "学生", "同学": "学生", "初学者": "学生", "新手": "学生", "小白": "学生",
-    "投资": "投资人", "资本": "投资人", "投行": "投资人",
-    "专家": "评审专家", "评委": "评审专家", "答辩委员": "评审专家",
+    "高中生": "学生", "初中生": "学生", "中学生": "学生", "小学生": "学生", "大学生": "学生",
 }
 SCENARIO_SYNONYMS = {
-    "述职": "汇报", "周报": "汇报", "月报": "汇报", "总结会": "汇报", "复盘": "汇报",
-    "融资": "路演", "招商": "路演", "推介": "路演",
     # 教学（原「培训」改名）：培训/授课等旧说法全部归到它，保证旧句不失效
     "培训": "教学", "授课": "教学", "讲课": "教学", "课程": "教学", "上课": "教学",
-    "讲解": "教学", "内训": "教学", "分享会": "教学",
-    "开题": "答辩", "中期检查": "答辩", "结题": "答辩", "毕业设计": "答辩",
-    "产品发布": "产品介绍", "新品": "产品介绍", "发布会": "产品介绍",
+    "讲解": "教学", "内训": "教学", "分享会": "教学", "课堂": "教学",
 }
 
 # —— 学科：teacher_ppt 的「学科」字段。允许「学段+学科」拼成「初中化学」——
@@ -341,10 +333,10 @@ ROLE_PROFILES: dict = {
         locked=("单元内容",),
         extras=_extract_subject,
     ),
-    # ── 通用 PPT：汇报 / 路演 / 教学 / 答辩 / 产品介绍 ──────────────────────
+    # ── 教学 PPT（原通用 PPT，已收敛）：受众=学生、场景=教学 ────────────────
     "ppt_general": RoleProfile(
         role="ppt_general",
-        label="通用PPT",
+        label="教学PPT",
         topic_field="主题",
         fields=("主题", "受众", "场景", "页数要求", "核心重点", "边界", "风格偏好"),
         enums={"受众": (AUDIENCES, AUDIENCE_SYNONYMS),
@@ -354,9 +346,7 @@ ROLE_PROFILES: dict = {
         case_fields=("主题", "受众", "场景", "页数要求"),
         validator=validate_ppt_general,
         sections=("主题与受众", "整体结构", "逐页大纲", "视觉建议"),
-        skeleton="汇报 现状→问题→原因→方案→计划 / 路演 痛点→产品→优势→数据→愿景 / "
-                 "教学 概念→原理步骤→示例→练习→小结 / 答辩 背景→方法→结果→讨论→结论 / "
-                 "产品介绍 使用场景→痛点→功能→优势→价格",
+        skeleton="教学 概念→原理步骤→示例→练习→小结（固定，不随输入变）",
         extras=_extract_focus_boundary_style,
     ),
 }
@@ -1108,10 +1098,10 @@ def self_check(lib: PromptLib, profile: Optional[RoleProfile] = None) -> None:
         case = {
             "teacher_ppt": {"学科": "初中化学", "课件主题": "质量守恒定律",
                             "学生水平": "基础", "页数要求": 8, "单元内容": "无"},
-            "ppt_general": {"主题": "新能源汽车智能座舱产品介绍", "受众": "客户",
-                            "场景": "产品介绍", "页数要求": 9,
-                            "核心重点": "语音交互准确率", "边界": "不展开电池技术",
-                            "风格偏好": "科技感"},
+            "ppt_general": {"主题": "一次函数的图像与性质", "受众": "学生",
+                            "场景": "教学", "页数要求": 9,
+                            "核心重点": "k 与 b 对图像的影响", "边界": "不展开二次函数",
+                            "风格偏好": "无"},
         }[prof.role]
         req = PlanRequest(profile=prof, values=case)
         prompt = build_plan_prompt(lib, req)
@@ -1188,12 +1178,12 @@ def self_check(lib: PromptLib, profile: Optional[RoleProfile] = None) -> None:
                   "页数要求": 12, "学生水平": "竞赛"}),
             ],
             "ppt_general": [
-                ("做一份 8 页的《向量数据库入门》PPT", {"主题": "向量数据库入门", "页数要求": 8}),
-                ("帮我生成一份关于新能源汽车智能座舱的 10 页 PPT，给投资人看，路演用",
-                 {"主题": "新能源汽车智能座舱", "页数要求": 10,
-                  "受众": "投资人", "场景": "路演"}),
-                ("做一份 9 页的《年度复盘》PPT，不要展开财务细节，边界：只讲业务",
-                 {"页数要求": 9, "边界": "只讲业务"}),
+                ("做一份 8 页的《一次函数》PPT", {"主题": "一次函数", "页数要求": 8}),
+                ("帮我生成一份关于《古诗词意象》的 10 页 PPT，给高中生讲，授课用",
+                 {"主题": "古诗词意象", "页数要求": 10,
+                  "受众": "学生", "场景": "教学"}),
+                ("做一份 9 页的《函数概念》PPT，不要展开复合函数，边界：只讲一次函数",
+                 {"页数要求": 9, "边界": "只讲一次函数"}),
             ],
         }[prof.role]
         for sentence, expect in samples:
@@ -1408,9 +1398,46 @@ def self_check(lib: PromptLib, profile: Optional[RoleProfile] = None) -> None:
     assert len(visible_texts(full)) == 3
     print(f"   ⑭ 内容完整性闸门 OK：删 3 条→检出 3 条；合法改短/原样→不误报")
 
+    # ⑮ 配图契约（P2.6）：§VIII 解析 / 废图评分 / spec_lock 投影格式
+    try:
+        from image_pipeline import (ImageRow, parse_image_table, render_image_table,
+                                    score_candidate, sync_lock_images, DEFAULT_PATTERN)
+        import tempfile as _tf
+        sample = (
+            "## VIII. Image Resource List\n\n"
+            "| Filename | Dimensions | Ratio | Purpose | Type | Image pattern | Crop Policy |"
+            " Acquire Via | Status | Reference | text_policy | page_role |\n"
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+            "| a.jpg | — | — | 封面 | Painting | #P1-01 | adaptive | web | Pending | 宝黛初会（Red Chamber painting） | 留白 | P01 封面 |\n\n"
+            "## IX. Content Outline\n"
+        )
+        _h, _rows = parse_image_table(sample)
+        assert len(_rows) == 1 and _rows[0].filename == "a.jpg", f"§VIII 解析错：{_rows}"
+        assert _rows[0].acquire == "web" and _rows[0].page_role.startswith("P01"), "列取值错"
+        assert "a.jpg" in render_image_table(_h, _rows), "表格回写成错"
+        _cover = score_candidate({"title": "Red Chamber cover.jpg", "license_tier": "no-attribution",
+                                  "width": 2000, "height": 2500})
+        _art = score_candidate({"title": 'Qian Hui\'an - Scene from the Novel "Red Chamber"',
+                                "license_tier": "no-attribution", "width": 1500, "height": 1800})
+        assert _art > _cover + 5, f"废图评分没拉开：画={_art:.1f} 封={_cover:.1f}"
+        with _tf.TemporaryDirectory() as _d:
+            from pathlib import Path as _P
+            _lock = _P(_d) / "spec_lock.md"
+            _lock.write_text("## canvas\n- viewBox: 0 0 1280 720\n\n## forbidden\n- x\n", encoding="utf-8")
+            _r = ImageRow({"Filename": "a.jpg", "Acquire Via": "web", "Status": "Sourced",
+                           "Crop Policy": "adaptive", "Image pattern": DEFAULT_PATTERN,
+                           "page_role": "P01 封面"})
+            sync_lock_images(_lock, [_r])
+            _body = _lock.read_text(encoding="utf-8")
+            assert "## images" in _body, "没写进 ## images"
+            assert "- p01: images/a.jpg | source=web | crop=adaptive" in _body, f"投影格式错：\n{_body}"
+        print("   ⑮ 配图契约 OK：§VIII 解析/回写 + 废图评分拉开 + spec_lock 投影格式正确")
+    except AssertionError as _exc:
+        raise AssertionError(f"配图契约自检失败：{_exc}") from _exc
+
     print(f"\n✅ 自检通过（当前角色 ROLE={ROLE!r}）：档案对齐 / S0 解析 / S1 渲染 / "
           f"入口预检 / S2 校验器 / 升级阶梯 / 降级交接 / agent 配对 / 讲稿备注 / "
-          f"图像几何 / 容器框自动修复 均正常")
+          f"图像几何 / 容器框自动修复 / 配图契约 均正常")
 
 
 # ===========================================================================
@@ -1466,18 +1493,35 @@ def self_check(lib: PromptLib, profile: Optional[RoleProfile] = None) -> None:
 @click.option("--agent-args", default="", help='透传给 agent.py 的其它参数，如 --parallel-pages 3。')
 @click.option("--reasoning-plan", type=click.Choice(REASONING_CHOICES), default=None,
               help="规划侧（P1/P2）推理强度。默认沿用 agent.py 全局设置。")
-@click.option("--reasoning-exec", type=click.Choice(REASONING_CHOICES), default=None,
-              help="执行侧（P3/P4）推理强度。⚠️ 实测 none 会导致交付失败，见 --help 长文。")
-@click.option("--reasoning-repair", type=click.Choice(REASONING_CHOICES), default=None,
-              help="仅 P4 修复的推理强度（未设则继承 --reasoning-exec）。这是「P3 快 + P4 会判断」那个组合。")
+@click.option("--reasoning-exec", type=click.Choice(REASONING_CHOICES), default="none",
+              show_default=True,
+              help="执行侧（P3）推理强度。默认 none≈7s/页（坐标由代码算好）；"
+                   "low≈30s/页。锁定值，见 LOCKED-DEFAULTS.md。")
+@click.option("--reasoning-repair", type=click.Choice(REASONING_CHOICES), default="low",
+              show_default=True,
+              help="仅 P4 修复的推理强度。默认 low（P3 快 + P4 会判断）。锁定值。")
 @click.option("--max-page-repairs", type=int, default=None,
               help="P4 逐页修复轮数上限（默认 2）。0 = 不修直接导出——但导出门仍会判 blocking。")
+@click.option("--image-source", type=click.Choice(["off", "web", "ai", "auto"]), default="off",
+              show_default=True,
+              help="配图来源。off=不配图（默认）/ web=联网图库 / ai=生图 / auto=按 §VIII 声明逐行走")
+@click.option("--image-review", type=click.Choice(["auto", "score", "manual"]), default="score",
+              show_default=True,
+              help="web 图审图方式。auto=元数据直选（易夹废图）/ score=候选评分后定稿 / manual=只备候选")
+@click.option("--image-providers", default=None,
+              help="图库优先级，逗号分隔（默认 wikimedia,openverse,pexels,pixabay）")
+@click.option("--image-max-candidates", type=int, default=8, show_default=True,
+              help="每张 web 图最多拉多少候选")
+@click.option("--image-strict/--no-image-strict", "image_strict", default=True, show_default=True,
+              help="相关性闸门：图与查询对不上就丢弃（宁可不配图，也不放错图）")
 @click.option("--quiet", is_flag=True, default=False, help="减少输出。")
 def main(task, role, topic, pages, subject, level, unit_file, sets,
          from_plan, plan_only, explain, do_check, model, base_url, api_key,
          temperature, retries, no_fewshot, skill_dir, output_root,
          agent_mode, agent_profile, agent_args,
-         reasoning_plan, reasoning_exec, reasoning_repair, max_page_repairs, quiet):
+         reasoning_plan, reasoning_exec, reasoning_repair, max_page_repairs, quiet,
+         image_source, image_review, image_providers, image_max_candidates,
+         image_strict):
     """PPT 生成链路：一句话 → 提示词模板 → LLM 规划 → PPT-Agent → PPTX。
 
     入口与 agent.py 同形：位置参数就是那句自然语言，中间由模板润色。
@@ -1738,9 +1782,22 @@ def main(task, role, topic, pages, subject, level, unit_file, sets,
         print(f"   {pairing_note}")
 
     root = Path(output_root).expanduser().resolve() if output_root else None
+    # 配图旋钮：直接拼成 agent.py 的命令行参数（不靠环境变量，看得见）
+    image_args: tuple = ()
+    if image_source != "off":
+        image_args = ("--image-source", image_source,
+                      "--image-review", image_review,
+                      "--image-max-candidates", str(image_max_candidates))
+        if image_providers:
+            image_args += ("--image-providers", image_providers)
+        if not image_strict:
+            image_args += ("--no-image-strict",)
+        print(f"   配图：source={image_source}  review={image_review}  "
+              f"候选上限={image_max_candidates}")
     code, output = run_ppt_agent(task_path, mode=agent_mode, profile=agent_profile,
                                  skill_dir=skill_dir, output_root=output_root,
-                                 extra_args=extra_args, stage_env=stage_env,
+                                 extra_args=tuple(extra_args) + image_args,
+                                 stage_env=stage_env,
                                  verbose=verbose)
 
     pptx = find_pptx(root, started)

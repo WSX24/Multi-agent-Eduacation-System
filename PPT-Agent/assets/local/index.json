@@ -1,0 +1,261 @@
+{
+  "items": [
+    {
+      "file": "linchong_yoshitoshi.jpg",
+      "subjects": [
+        "林冲",
+        "Lin Chong",
+        "水浒",
+        "风雪山神庙"
+      ],
+      "title": "月冈芳年《豹子头林冲 于山神庙前杀陆虞候》",
+      "license": "Public Domain",
+      "license_tier": "no-attribution",
+      "source": "https://commons.wikimedia.org/wiki/File:NDL-DC_1307852-Tsukioka_Yoshitoshi-豹子頭林沖於山神廟前殺陸虞候-cmb.jpg",
+      "width": 1200,
+      "height": 1583,
+      "attribution": "linchong_yoshitoshi.jpg — 月冈芳年《豹子头林冲 于山神庙前杀陆虞候》，Public Domain"
+    },
+    {
+      "file": "linchong_kuniyoshi.jpg",
+      "subjects": [
+        "林冲",
+        "Lin Chong"
+      ],
+      "title": "歌川国芳《豹子头林冲》雪战图",
+      "license": "Public Domain",
+      "license_tier": "no-attribution",
+      "source": "https://commons.wikimedia.org/wiki/File:Utagawa_Kuniyoshi_-_水滸傳_-林冲.jpg",
+      "width": 960,
+      "height": 1416,
+      "attribution": "linchong_kuniyoshi.jpg — 歌川国芳《豹子头林冲》雪战图，Public Domain"
+    },
+    {
+      "file": "water_margin_woodblock.jpg",
+      "subjects": [
+        "水浒",
+        "water margin",
+        "版画",
+        "woodblock",
+        "刻本"
+      ],
+      "title": "《新编水浒画传》刻本插图（LACMA）",
+      "license": "Public Domain",
+      "license_tier": "no-attribution",
+      "source": "https://commons.wikimedia.org/wiki/File:Pages_from_the_Illustrated_Book_Shinpen_Suikogaden_LACMA_M.2006.136.182a-b.jpg",
+      "width": 1280,
+      "height": 900,
+      "attribution": "water_margin_woodblock.jpg — 《新编水浒画传》刻本插图（LACMA），Public Domain"
+    },
+    {
+      "file": "snow_temple.jpg",
+      "subjects": [
+        "雪寺",
+        "雪夜山神庙",
+        "snowy temple",
+        "temple snow",
+        "山神庙",
+        "snow temple"
+      ],
+      "title": "雪中寺庙群（Pixabay）",
+      "license": "Pixabay Content License",
+      "license_tier": "no-attribution",
+      "source": "https://pixabay.com/photos/temple-snow-trees-winter-5894020/",
+      "width": 1280,
+      "height": 852,
+      "attribution": "snow_temple.jpg — 雪中寺庙群（Pixabay），Pixabay Content License"
+    },
+    {
+      "file": "snow_mountain.jpg",
+      "subjects": [
+        "雪山",
+        "snow mountain",
+        "雪山背景",
+        "alpine snow"
+      ],
+      "title": "蓝调雪山（Pixabay）",
+      "license": "Pixabay Content License",
+      "license_tier": "no-attribution",
+      "source": "https://pixabay.com/photos/alpine-mountain-peak-summit-snow-7703065/",
+      "width": 1280,
+      "height": 854,
+      "attribution": "snow_mountain.jpg — 蓝调雪山（Pixabay），Pixabay Content License"
+    },
+    {
+      "file": "snow_path.jpg",
+      "subjects": [
+        "雪径",
+        "风雪荒原",
+        "snow path",
+        "winter forest",
+        "雪地",
+        "荒原"
+      ],
+      "title": "雪径雾凇（Pixabay）",
+      "license": "Pixabay Content License",
+      "license_tier": "no-attribution",
+      "source": "https://pixabay.com/photos/snow-landscape-trees-7646952/",
+      "width": 1280,
+      "height": 853,
+      "attribution": "snow_path.jpg — 雪径雾凇（Pixabay），Pixabay Content License"
+    },
+    {
+      "file": "art_flowers_birds.jpg",
+      "subjects": [
+        "落花",
+        "归燕",
+        "燕子",
+        "花鸟",
+        "梨花",
+        "折枝",
+        "折枝花卉",
+        "花卉",
+        "花枝",
+        "春花",
+        "花鸟画",
+        "一枝春",
+        "牡丹",
+        "海棠",
+        "玉兰"
+      ],
+      "title": "宋元名人花鸟合璧画册（花鸟局部）",
+      "license": "CC BY-NC 4.0",
+      "license_tier": "manual",
+      "source": "https://www.shuge.org/view/song_yuan_ming_ren_hua_niao_he_bi/",
+      "width": 1170,
+      "height": 1060,
+      "attribution": "art_flowers_birds.jpg — 宋元名人花鸟合璧画册（花鸟局部），书格 shuge.org，CC BY-NC 4.0"
+    },
+    {
+      "file": "art_ladies_swing.jpg",
+      "subjects": [
+        "仕女",
+        "斗草",
+        "春游",
+        "少女",
+        "秋千",
+        "闺阁",
+        "簪花",
+        "对镜",
+        "梳妆",
+        "仕女图"
+      ],
+      "title": "仕女图册（楼阁仕女）",
+      "license": "CC BY-NC 4.0",
+      "license_tier": "manual",
+      "source": "https://www.shuge.org/view/shi_nv_tu_ce/",
+      "width": 1170,
+      "height": 1060,
+      "attribution": "art_ladies_swing.jpg — 仕女图册（楼阁仕女），书格 shuge.org，CC BY-NC 4.0"
+    },
+    {
+      "file": "art_garden.jpg",
+      "subjects": [
+        "园林",
+        "小径",
+        "山庄",
+        "亭台",
+        "楼阁",
+        "庭院",
+        "园子"
+      ],
+      "title": "御制避暑山庄诗图册（园林全景）",
+      "license": "CC BY-NC 4.0",
+      "license_tier": "manual",
+      "source": "https://www.shuge.org/view/yu_zhi_bi_shu_shan_zhuang_shi_tu_ce/",
+      "width": 1170,
+      "height": 1060,
+      "attribution": "art_garden.jpg — 御制避暑山庄诗图册（园林全景），书格 shuge.org，CC BY-NC 4.0"
+    },
+    {
+      "file": "art_peach_willow.jpg",
+      "subjects": [
+        "桃花",
+        "落花",
+        "梨花",
+        "折枝",
+        "折枝花卉",
+        "花卉",
+        "花枝",
+        "春花",
+        "桃枝",
+        "柳枝",
+        "春景"
+      ],
+      "title": "十二月花神册（桃花柳枝）",
+      "license": "CC BY-NC 4.0",
+      "license_tier": "manual",
+      "source": "https://www.shuge.org/view/shi_er_yue_hua_shen_ce/",
+      "width": 1200,
+      "height": 927,
+      "attribution": "art_peach_willow.jpg — 十二月花神册（桃花柳枝），书格 shuge.org，CC BY-NC 4.0"
+    },
+    {
+      "file": "art_lotus_pond.jpg",
+      "subjects": [
+        "荷花",
+        "荷塘",
+        "荷叶",
+        "莲花",
+        "lotus"
+      ],
+      "title": "荷塘白荷（Pixabay）",
+      "license": "Pixabay Content License",
+      "license_tier": "no-attribution",
+      "source": "https://pixabay.com/photos/lotus-flowers-lotus-flowers-4792888/",
+      "width": 801,
+      "height": 1200,
+      "attribution": "art_lotus_pond.jpg — 荷塘白荷（Pixabay），Pixabay Content License"
+    },
+    {
+      "file": "art_lotus_flower.jpg",
+      "subjects": [
+        "荷花",
+        "荷花特写",
+        "莲花",
+        "lotus"
+      ],
+      "title": "荷花特写（Pixabay）",
+      "license": "Pixabay Content License",
+      "license_tier": "no-attribution",
+      "source": "https://pixabay.com/photos/lotus-flower-bud-petals-water-lily-1364465/",
+      "width": 1200,
+      "height": 900,
+      "attribution": "art_lotus_flower.jpg — 荷花特写（Pixabay），Pixabay Content License"
+    },
+    {
+      "file": "art_lotus_pink.jpg",
+      "subjects": [
+        "荷花",
+        "粉荷",
+        "荷叶",
+        "莲花",
+        "lotus"
+      ],
+      "title": "粉荷（Pixabay）",
+      "license": "Pixabay Content License",
+      "license_tier": "no-attribution",
+      "source": "https://pixabay.com/photos/lotus-flower-bloom-blossom-978659/",
+      "width": 1200,
+      "height": 800,
+      "attribution": "art_lotus_pink.jpg — 粉荷（Pixabay），Pixabay Content License"
+    },
+    {
+      "file": "art_lotus_night.jpg",
+      "subjects": [
+        "荷花",
+        "荷塘",
+        "月色荷塘",
+        "莲花",
+        "lotus"
+      ],
+      "title": "暗调荷塘（Pixabay）",
+      "license": "Pixabay Content License",
+      "license_tier": "no-attribution",
+      "source": "https://pixabay.com/photos/lotus-flower-nature-plant-bloom-8057438/",
+      "width": 846,
+      "height": 1200,
+      "attribution": "art_lotus_night.jpg — 暗调荷塘（Pixabay），Pixabay Content License"
+    }
+  ]
+}

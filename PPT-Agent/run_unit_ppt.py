@@ -153,11 +153,18 @@ def main() -> int:
     # 推理旋钮：透传给 pipeline.py（控制 PPT 阶段 P1~P4 的推理强度，影响速度/质量）
     ap.add_argument("--reasoning-plan", default=None, choices=["none", "low", "medium", "high", "max"],
                     help="P1/P2 规划阶段推理强度（默认继承全局 low）")
-    ap.add_argument("--reasoning-exec", default=None, choices=["none", "low", "medium", "high", "max"],
+    ap.add_argument("--reasoning-exec", default="none", choices=["none", "low", "medium", "high", "max"],
                     help="P3 逐页写 SVG 的推理强度；none=关思考（快，坐标系已由代码算好）")
-    ap.add_argument("--reasoning-repair", default=None, choices=["none", "low", "medium", "high", "max"],
+    ap.add_argument("--reasoning-repair", default="low", choices=["none", "low", "medium", "high", "max"],
                     help="P4 修复的推理强度；常用组合：--reasoning-exec none --reasoning-repair low")
     ap.add_argument("--max-page-repairs", type=int, default=None, help="P4 逐页修复轮数上限（默认 2）")
+    # 配图旋钮：透传给 pipeline.py（控制 §VIII 取图）
+    ap.add_argument("--image-source", default="off", choices=["off", "web", "ai", "auto"],
+                    help="配图来源：off=不配图（默认）/web=联网图库/ai=生图/auto=按 §VIII 声明逐行走")
+    ap.add_argument("--image-review", default="score", choices=["auto", "score", "manual"],
+                    help="web 图审图方式（默认 score：候选集评分后定稿）")
+    ap.add_argument("--image-providers", default=None, help="图库优先级，逗号分隔")
+    ap.add_argument("--image-max-candidates", type=int, default=8, help="每张 web 图候选数上限")
     args = ap.parse_args()
 
     raw_level = args.level
@@ -198,6 +205,7 @@ def main() -> int:
         print("─" * 60)
         return 0
 
+
     # ── ② 桥接：单元输出 → PPT 的「单元内容」──────────────────────
     ppt_input = unit_output_to_ppt_content(unit_out)
     bridge_md = RUNS_DIR / f"unit_ppt_input_{stamp}.md"
@@ -222,6 +230,12 @@ def main() -> int:
         cmd += ["--reasoning-repair", args.reasoning_repair]
     if args.max_page_repairs is not None:
         cmd += ["--max-page-repairs", str(args.max_page_repairs)]
+    if args.image_source != "off":
+        cmd += ["--image-source", args.image_source,
+                "--image-review", args.image_review,
+                "--image-max-candidates", str(args.image_max_candidates)]
+        if args.image_providers:
+            cmd += ["--image-providers", args.image_providers]
     if args.agent_args.strip():
         cmd += ["--agent-args", args.agent_args]
     print(f"③ 规划 + 产片：{' '.join(cmd)}\n" + "─" * 72)

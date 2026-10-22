@@ -35,7 +35,8 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import click
-from openai import OpenAI
+from openai import (APIConnectionError, APITimeoutError, InternalServerError,
+                    OpenAI, RateLimitError)
 
 try:  # python-dotenv 是可选依赖，缺失时用内置解析器兜底
     from dotenv import load_dotenv
@@ -125,6 +126,16 @@ LOOP_DISTINCT_WARN = 3
 LOOP_DISTINCT_ABORT = 2
 #: 每多少步打一条"仍在推进"的心跳，让无人值守运行可观测
 PROGRESS_HEARTBEAT_STEPS = 50
+
+#: —— 模型调用瞬时错误重试（与 pipeline 规划阶段的 BACKOFF_SECONDS 对齐）——
+#: 规划阶段对网络异常有 backoff 重试，执行阶段（staged P3/P4 逐页生成）此前没有：
+#: 一次 APIConnectionError 直接冒泡到 agent.py 退出码 1，整条无人值守链路被打断。
+#: 这里补上：只对瞬时错误（网络中断/超时/限流/5xx）重试，认证(401)/参数(400)不重试。
+MODEL_RETRIES = 3                        # 额外重试次数（含首次共 4 次）
+MODEL_BACKOFF_SECONDS = (0.0, 3.0, 8.0, 15.0)
+#: 值得重试的瞬时异常类型（openai SDK：APIConnectionError 含 APITimeoutError 子类 /
+#: RateLimitError(429) / InternalServerError(5xx)。认证、权限、参数错误不在其内。）
+MODEL_TRANSIENT_EXC = (APIConnectionError, APITimeoutError, RateLimitError, InternalServerError)
 
 
 # ===========================================================================
@@ -1121,6 +1132,44 @@ class PPTAgent:
 
     # ------------------------------------------------------------ 模型
 
+    def _is_transient_model_error(self, exc: Exception) -> bool:
+        """瞬时错误（网络中断/超时/限流/5xx）才值得重试；其余确定性错误重试无意义。"""
+        return isinstance(exc, MODEL_TRANSIENT_EXC)
+
+    def _call_with_retry(
+        self, request: Dict[str, object], started: float
+    ) -> Tuple[str, Optional[str], Optional[object]]:
+        """发起一次模型请求，瞬时错误自动 backoff 重试。
+
+        与 pipeline 规划阶段对齐：只对瞬时异常重试，backoff 0/3/8/15s；
+        认证(401)/权限(403)/参数(400) 等确定性错误直接抛，不空转。
+        返回 (content, finish_reason, usage)，流式与非流式同形。
+        """
+        stream = bool(request.get("stream"))
+        for attempt in range(MODEL_RETRIES + 1):
+            try:
+                if stream:
+                    return self._stream_call(request, started)
+                response = self.client.chat.completions.create(**request)  # type: ignore[arg-type]
+                choice = response.choices[0]
+                return (choice.message.content or "",
+                        getattr(choice, "finish_reason", None),
+                        getattr(response, "usage", None))
+            except Exception as exc:  # noqa: BLE001 —— 瞬时错误重试，其余直接抛
+                if not self._is_transient_model_error(exc) or attempt >= MODEL_RETRIES:
+                    raise
+                delay = MODEL_BACKOFF_SECONDS[min(attempt, len(MODEL_BACKOFF_SECONDS) - 1)]
+                print(
+                    f"\n   ⚠️ {'流式' if stream else '非流式'}调用瞬时错误"
+                    f"（{type(exc).__name__}），{delay:g}s 后重试"
+                    f"（{attempt + 1}/{MODEL_RETRIES}）",
+                    flush=True,
+                )
+                if delay:
+                    time.sleep(delay)
+        # 理论不可达：循环内要么 return 要么 raise
+        raise RuntimeError("_call_with_retry 不可达分支")
+
     def call_model(
         self,
         messages: List[Dict[str, str]],
@@ -1160,18 +1209,14 @@ class PPTAgent:
             request["stream"] = True
             request["stream_options"] = {"include_usage": True}
             try:
-                content, finish_reason, usage = self._stream_call(request, started)
-            except Exception as exc:  # noqa: BLE001 —— 端点不支持流式时退回
+                content, finish_reason, usage = self._call_with_retry(request, started)
+            except Exception as exc:  # noqa: BLE001 —— 流式重试仍失败/不支持流式时退回
                 print(f"\n   ⚠️ 流式失败（{type(exc).__name__}），退回非流式重试", flush=True)
                 request.pop("stream", None)
                 request.pop("stream_options", None)
                 stream = False
         if not stream:
-            response = self.client.chat.completions.create(**request)  # type: ignore[arg-type]
-            choice = response.choices[0]
-            content = choice.message.content or ""
-            finish_reason = getattr(choice, "finish_reason", None)
-            usage = getattr(response, "usage", None)
+            content, finish_reason, usage = self._call_with_retry(request, started)
 
         # 统计累加加锁：并行生成多页时多个线程同时调 call_model，这些累加
         # 不是原子的，串行化后账本数字才不丢更新。
@@ -1630,6 +1675,25 @@ class PPTAgent:
 # CLI
 # ===========================================================================
 
+def apply_staged_reasoning_defaults(mode: str) -> None:
+    """staged 模式的锁定默认：P3 执行=none，P4 修复=low。
+
+    见 LOCKED-DEFAULTS.md。用户 2026-10-19 明确要求锁定这两个值。
+
+    为什么不直接改 `--reasoning-effort` 的默认：那是**全局**旋钮，P1/P2 规划
+    也吃它；降到 none 会影响规划质量。这里只给 staged 的两个阶段旋钮设默认，
+    而且用 `setdefault` —— 外部（pipeline.py 的 stage_env）已经设了就不覆盖。
+    """
+    if mode != "staged":
+        return
+    try:
+        from staged import STAGE_REASONING_ENV
+    except Exception:  # noqa: BLE001 —— 取不到就不设，不影响主流程
+        return
+    os.environ.setdefault(STAGE_REASONING_ENV["exec"], "none")
+    os.environ.setdefault(STAGE_REASONING_ENV["repair"], "low")
+
+
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("task", required=False)
 @click.option("--task-file", type=click.Path(exists=True, dir_okay=False), default=None,
@@ -1683,6 +1747,16 @@ class PPTAgent:
               help="真实用量达到窗口的该比例时才折叠中段历史（基于提供商上报的 usage）。")
 @click.option("--capacity-check/--no-capacity-check", "capacity_check", default=True, show_default=True,
               help="开工前验证 skill 强制阅读量能否装进上下文；不足则直接报错，避免白跑。")
+@click.option("--image-source", type=click.Choice(["off", "web", "ai", "auto"]), default="off", show_default=True,
+              help="配图来源。off=不配图（默认，行为完全不变）/ web=联网图库 / ai=生图 / auto=按 design_spec §VIII 声明逐行走")
+@click.option("--image-review", type=click.Choice(["auto", "score", "manual"]), default="score", show_default=True,
+              help="web 图审图方式。auto=元数据直选（易夹废图）/ score=候选集评分后定稿 / manual=只备候选等人选")
+@click.option("--image-providers", default=None,
+              help="图库优先级，逗号分隔（默认 wikimedia,openverse,pexels,pixabay）")
+@click.option("--image-max-candidates", default=8, show_default=True, type=int,
+              help="每张 web 图最多拉多少候选")
+@click.option("--image-strict/--no-image-strict", "image_strict", default=True, show_default=True,
+              help="相关性闸门：取到的图与查询对不上就丢弃（宁可不配图，也不放错图）")
 @click.option("--confirm-commands", is_flag=True, default=False,
               help="执行命令前询问（默认关闭）。默认行为：agent 拥有全局执行权限，直接运行。")
 @click.option("--preflight/--no-preflight", default=True, show_default=True,
@@ -1695,7 +1769,9 @@ def main(task, task_file, skill_dir, output_root, profile, provider, base_url, a
          stall_abort, stall_detect,
          command_timeout, mode, parallel_pages,
          max_observation_chars, context_budget, context_tokens, capacity_check,
-         compact_threshold, confirm_commands, preflight, check, quiet):
+         compact_threshold, confirm_commands, preflight, check, quiet,
+         image_source, image_review, image_providers, image_max_candidates,
+         image_strict):
     """基于 ppt-master skill 的 PPT 生成 Agent。
 
     示例：
@@ -1782,6 +1858,9 @@ def main(task, task_file, skill_dir, output_root, profile, provider, base_url, a
         except RuntimeError as exc:
             raise click.ClickException(str(exc)) from exc
 
+    # 锁定的分阶段推理默认（P3=none / P4=low），见 LOCKED-DEFAULTS.md
+    apply_staged_reasoning_defaults(mode)
+
     if mode == "staged":
         from staged import StagedRunner
         runner = StagedRunner(
@@ -1789,6 +1868,13 @@ def main(task, task_file, skill_dir, output_root, profile, provider, base_url, a
             parallel_pages=parallel_pages,
             plan_model=plan_model,
             execute_model=execute_model,
+            image_source=image_source,
+            image_review=image_review,
+            image_providers=tuple(
+                p.strip() for p in (image_providers or "").split(",") if p.strip()
+            ) or None,
+            image_max_candidates=image_max_candidates,
+            image_strict=image_strict,
         )
         try:
             final_answer = runner.run(task)

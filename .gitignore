@@ -60,3 +60,18 @@ PPT-Agent/deliver/
 *.docx
 ppt-master/
 .agents/
+
+# ── 集成路由的运行产出（体积大，且是每次跑的日志/成品）──
+# 注意：集成路由V1.0/templates/ 是**产出**（发给 LLM 的提示词副本），
+# 不是模板源；模板源在 PromptTemplate/templates/，那个要入仓。
+集成路由V1.0/ppt/
+集成路由V1.0/templates/
+集成路由V1.0/__pycache__/
+
+# ── 前端依赖（推前跑过 npm install 就会在这里）──
+node_modules/
+
+# ── 临时目录 ──
+.tmp_lotus/
+# 离线传输用的 git bundle（12M 二进制，不该入仓）
+.tmp_bundle/
