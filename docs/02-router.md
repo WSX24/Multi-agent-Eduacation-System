@@ -168,12 +168,33 @@ python router.py "..." --image-providers shuge,pixabay           # 指定图库�
 `--image-providers` 不指定时用 `image_pipeline.DEFAULT_PROVIDERS`：
 
 ```
-shuge → pexels → pixabay → wikimedia → openverse
+shuge → met → pexels → pixabay → wikimedia → openverse
 ```
 
-> 人物/文物/版画类需求会临时重排为 `wikimedia → openverse → shuge → pixabay → pexels`
-> （博物馆有分类与藏品元数据）；实景/风景类重排为 `pixabay → pexels → ...`。
+> 人物/文物/版画/古诗文类需求会临时重排为
+> `met → wikimedia → openverse → shuge → pixabay → pexels`（博物馆有分类与藏品元数据）；
+> 实景/风景类重排为 `pixabay → pexels → met → ...`。
 > 这是代码里的 `_provider_order_for()`，不看文档也会自动生效。
+
+### 图源一览
+
+| 图源 | key | 授权 | 擅长 |
+|---|---|---|---|
+| `met` | 不需要 | **CC0 / 公有领域** | 中国古画（山水/花鸟/竹石/立轴）、文物。实测「竹石图」拿到 2404×4000 立轴 |
+| `shuge` 书格 | 不需要 | CC BY-NC 4.0（教学可用，需署名） | 古籍整书扫描（书法、版画、册页） |
+| `pixabay` | `PIXABAY_API_KEY` | Pixabay License | 实景照片、花卉、风景 |
+| `pexels` | `PEXELS_API_KEY` | Pexels License | 实景照片 |
+| `wikimedia` | 不需要 | PD/CC | 综合；**国内直连常不通** |
+| `openverse` | 不需要 | CC 系 | 综合；**国内直连常不通** |
+| `local` | — | 本地库（PD） | 首批命中，不联网，同样要过闸门 |
+
+**Met 的两个坑**（2026-10-22 实测）：
+
+1. 它的 `departmentId=6` 是「亚洲艺术」，**日本藏品占大头**。搜 `Chinese landscape`
+   的 10 条里 7 条是日本浮世绘/屏风（只是画了中国题材）。所以代码里强制
+   `culture` 含 `China`，否则会给古诗词课件配日本画。
+2. **具体中国名人它一件也没有**：`Li Qingzhao`、`Yue Fei` 搜索结果都是 0。
+   李清照画像、岳飞画像这类需求仍会降级为「不配图」。
 
 ### 配图不工作时按这个顺序查
 

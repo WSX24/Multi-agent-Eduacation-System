@@ -62,7 +62,7 @@ VARIANT_RE = re.compile(r"[（(]\s*([A-Za-z][^（()）]*?)\s*[)）]\s*$")
 FETCH_ACQUIRE = {"web", "ai"}
 
 #: 默认 provider 顺序：先直连可用的国内/商业源，Wikimedia 放最后（需要代理）
-DEFAULT_PROVIDERS: Tuple[str, ...] = ("shuge", "pexels", "pixabay", "wikimedia", "openverse")
+DEFAULT_PROVIDERS: Tuple[str, ...] = ("shuge", "met", "pexels", "pixabay", "wikimedia", "openverse")
 
 #: 书格（shuge.org）是 WordPress，有 REST API，国内直连 0.1s。
 #: 授权：书籍本身公有领域；影像默认 CC BY-NC 4.0（教学/非商用可用，需署名），部分 CC0。
@@ -1066,6 +1066,166 @@ def fetch_shuge(project: Path, row: ImageRow, skill_dir: Path,
 
 
 # ---------------------------------------------------------------------------
+# 取图：The Met 开放数据（纽约大都会博物馆，零 key，CC0）
+# ---------------------------------------------------------------------------
+# 为什么加它：Pixabay/书格 都没有「仕女 / 花鸟 / 山水 / 楼阁」这类中国古画的
+# 系统收藏，导致「李清照画像」这种需求只能配到猫。Met 有约 49 万件公有领域高清图，
+# 每件带 isPublicDomain + primaryImage + 年代/材质/文化，授权干净、竖幅多。
+#
+# 两个必须知道的坑：
+#   1. 全馆搜索会把「Chinese lady」配成欧洲铜版画、日本浮世绘
+#      → 必须带 departmentId=6（亚洲艺术部）
+#   2. 具体中国名人（李清照 / 岳飞）它**一件也没有** → 这类需求仍会降级
+MET_API = "https://collectionapi.metmuseum.org/public/collection/v1"
+MET_UA = {"User-Agent": "Mozilla/5.0 (compatible; ppt-agent/1.0)"}
+#: 亚洲艺术部
+MET_ASIAN_DEPT = 6
+#: 每次最多看多少个详情（详情接口要一个个拿；实测 PD+有图 的命中率 20%~100%，
+#: 所以池子要开大一点，否则「Ming dynasty painting」10 条里只有 2 条可用）
+MET_MAX_DETAILS = 20
+#: 已经用过的 Met 图（按 URL 记住），避免同册重复
+_MET_USED: Dict[str, int] = {}
+
+
+def _met_search(query: str, limit: int, timeout: int = 25) -> List[int]:
+    """调 Met 搜索，返回 objectID 列表。
+
+    ⚠️ `v1/search` 已于 2026-10-01 退役（官方报错里点名要用 v1.1 + offset/limit）。
+    """
+    import requests
+
+    if not query.strip():
+        return []
+    params = {"q": query, "offset": 0, "limit": max(1, limit),
+              "departmentId": MET_ASIAN_DEPT}
+    try:
+        r = requests.get(f"{MET_API}.1/search", params=params,
+                         headers=MET_UA, timeout=timeout)
+        if not r.ok:
+            return []
+        ids = r.json().get("objectIDs") or []
+        return [int(i) for i in ids if str(i).isdigit()]
+    except Exception:          # noqa: BLE001 —— 网络问题不抛，让上游换图源
+        return []
+
+
+def _met_object(obj_id: int, timeout: int = 25) -> Optional[Dict[str, object]]:
+    """取一件藏品详情；不可用（非公有领域 / 无图）返回 None。"""
+    import requests
+
+    try:
+        r = requests.get(f"{MET_API}/objects/{obj_id}", headers=MET_UA, timeout=timeout)
+        if not r.ok:
+            return None
+        d = r.json()
+    except Exception:          # noqa: BLE001
+        return None
+    if not d.get("isPublicDomain"):
+        return None            # 版权图一律不碰
+    # **必须是中国的藏品**。departmentId=6 是「亚洲艺术」，实测中国画只占少数：
+    # 搜 "Chinese landscape" 得到的 10 条里 7 条是日本浮世绘/屏风（只是画了
+    # 中国题材）。不卡 culture 就会给古诗词课件配一张日本浮世绘 —— 正是要修的病。
+    culture = str(d.get("culture") or "")
+    country = str(d.get("country") or "")
+    if not ("China" in culture or "Chinese" in culture or "China" in country):
+        return None
+    img = str(d.get("primaryImage") or "").strip()
+    if not img:
+        return None            # 没有高清图的不用（primaryImageSmall 只作兜底）
+        img = str(d.get("primaryImageSmall") or "").strip()
+    tags = " ".join(str(d.get(k) or "") for k in
+                    ("objectDate", "culture", "medium", "classification", "department"))
+    return {
+        "id": obj_id,
+        "title": str(d.get("title") or ""),
+        "tags": tags.strip(),
+        "description": str(d.get("objectName") or ""),
+        "url": img,
+        "page": str(d.get("objectURL") or ""),
+        "artist": str(d.get("artistDisplayName") or ""),
+        "license_tier": "no-attribution",   # CC0 / Public Domain
+        "width": 0, "height": 0,
+    }
+
+
+def fetch_met(project: Path, row: ImageRow, skill_dir: Path,
+              max_candidates: int = 8, timeout: int = 60) -> FetchResult:
+    """从 The Met 取一张公有领域高清图（仕女/花鸟/山水/楼阁这类题材最对路）。"""
+    import requests
+    from concurrent.futures import ThreadPoolExecutor
+
+    main_query, variants = split_query_variants(row.reference)
+    # Met 是英文库：优先用英文变体；中文查询基本 0 命中，但作为兜底仍试一次
+    queries: List[str] = []
+    for q in list(variants) + [main_query, row.get("Purpose") or ""]:
+        q = (q or "").strip()
+        if q and q not in queries:
+            queries.append(q)
+    if not queries:
+        return FetchResult(False, "Met：没有可用的检索词")
+
+    ids: List[int] = []
+    used_query = ""
+    for q in queries[:3]:
+        got = [i for i in _met_search(q, min(max_candidates * 4, 30), timeout=25) if i not in ids]
+        if got:
+            ids.extend(got)
+            used_query = used_query or q
+        if len(ids) >= MET_MAX_DETAILS:
+            break
+    if not ids:
+        return FetchResult(False, f"Met：无搜索结果（试过 {'/'.join(queries[:3])[:40]}）")
+
+    ids = ids[:MET_MAX_DETAILS]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        items = [it for it in pool.map(_met_object, ids) if it]
+    if not items:
+        return FetchResult(False, f"Met：{len(ids)} 条结果里没有公有领域高清图")
+
+    # 与其它图源同一排序口径：先比命中词数，再比风格偏好
+    items.sort(key=lambda it: rank_key(it, row), reverse=True)   # type: ignore[arg-type]
+
+    images_dir = project / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    target = images_dir / row.filename
+    for it in items[:6]:
+        url = str(it.get("url") or "")
+        if _MET_USED.get(url):
+            continue                       # 同册不重复用同一张
+        try:
+            r = requests.get(url, headers=MET_UA, timeout=timeout)
+        except Exception:                  # noqa: BLE001
+            continue
+        if not r.ok or len(r.content) < 20000:
+            continue
+        tmp = images_dir / f"._met_{row.filename}"
+        tmp.write_bytes(r.content)
+        size = probe_size(tmp)
+        if not size or size[0] < MIN_WIDTH or size[1] < MIN_HEIGHT:
+            tmp.unlink(missing_ok=True)
+            continue
+        tmp.replace(target)
+        _MET_USED[url] = 1
+        title = str(it.get("title") or "")
+        _append_source_record(
+            project, row.filename,
+            provider="met",
+            title=title[:120],
+            author=str(it.get("artist") or ""),
+            license_name="CC0 / Public Domain (The Met Open Access)",
+            license_tier="no-attribution",
+            source_page_url=str(it.get("page") or ""),
+            download_url=url,
+            width=size[0], height=size[1],
+            search_query=used_query,
+            attribution_text="",
+            status="sourced")
+        return FetchResult(True, f"Met {size[0]}x{size[1]}｜{title[:26]}", "met",
+                           match_text=f"{title} {it.get('tags') or ''}")
+    return FetchResult(False, f"Met：{len(items)} 张公有领域候选均不满足尺寸")
+
+
+# ---------------------------------------------------------------------------
 # 取图：Pixabay（免费 key，直连；中文查询 + lang=zh 才能命中中文标签）
 # ---------------------------------------------------------------------------
 def _shorten_query(q: str, limit: int = 4) -> str:
@@ -1513,12 +1673,13 @@ def _provider_order_for(row: ImageRow, default: Sequence[str]) -> List[str]:
     """按需求类型重排图源；只在给定 providers 内重排，不新增能力。"""
     base = list(default)
     text = _row_text(row)
-    if _is_arts_row(row):
-        # 人物/文物/版画：博物馆与 Commons 有分类和藏品元数据；
+    if _is_arts_row(row) or _is_classical_row(row):
+        # 人物/文物/版画/古诗文：博物馆源有分类、藏品元数据和干净的授权，
+        # 排最前（met 零 key 且本机直连可达，比 wikimedia 稳）。
         # 书格只当文献/书籍图像源（整书扫描页容易冒充人物画像），排后。
-        order = ["wikimedia", "openverse", "shuge", "pixabay", "pexels"]
+        order = ["met", "wikimedia", "openverse", "shuge", "pixabay", "pexels"]
     elif any(k in text for k in _SCENE_HINTS):
-        order = ["pixabay", "pexels", "wikimedia", "openverse", "shuge"]
+        order = ["pixabay", "pexels", "met", "wikimedia", "openverse", "shuge"]
     else:
         order = base
     picked = [p for p in order if p in base]
@@ -2009,6 +2170,7 @@ _PROVIDER_HOSTS: Dict[str, tuple] = {
     "pexels": ("api.pexels.com", 443),
     "pixabay": ("pixabay.com", 443),
     "shuge": ("www.shuge.org", 443),
+    "met": ("collectionapi.metmuseum.org", 443),
 }
 _REACH_CACHE: Dict[str, bool] = {}
 _REACH_LOCK = threading.Lock()
@@ -2192,6 +2354,9 @@ def run_image_phase(project: Path, skill_dir: Path,
             if local_result.ok:
                 providers_try = ["local"] + providers_try
                 say(f"     · 本地库候选：{local_result.note}")
+            # 逐家失败原因要留下来：否则最后只显示「最后一家」的报错，
+            # 用户看不到「Met 有 9 条但都不是公有领域」「wikimedia 超时」这类关键信息
+            notes: List[str] = []
             for provider in providers_try:
                 if provider == "local":
                     result = local_result
@@ -2199,6 +2364,8 @@ def run_image_phase(project: Path, skill_dir: Path,
                     result = fetch_shuge(project, row, skill_dir)
                 elif provider == "pixabay":
                     result = fetch_pixabay(project, row, skill_dir, max_candidates=max_candidates)
+                elif provider == "met":
+                    result = fetch_met(project, row, skill_dir, max_candidates=max_candidates)
                 else:
                     override = ""
                     if (arts_row and provider in ("wikimedia", "openverse")
@@ -2211,6 +2378,7 @@ def run_image_phase(project: Path, skill_dir: Path,
                 if result.needs_selection:
                     break
                 if not result.ok:
+                    notes.append(f"{provider}:{result.note}")
                     continue
                 # ── 相关性闸门放在循环**内**：被拒就换下一家 ──
                 # 实测事故（2026-10-19 紫藤萝）：书格先「成功」拿到不相干的花册，
@@ -2255,6 +2423,8 @@ def run_image_phase(project: Path, skill_dir: Path,
                                      filename=row.filename,
                                      reference=row.reference or "")
                 result = FetchResult(False, f"{provider} 结果不合格（{why}）")
+            if (not result.ok and not result.needs_selection and notes):
+                result = FetchResult(False, "｜".join(notes[:4]))
             if (not result.ok and not result.needs_selection
                     and source == "auto" and (os.getenv("IMAGE_BACKEND") or "").strip()):
                 say(f"     · {row.filename}: web 失败（{result.note}）→ 尝试 AI 生图")

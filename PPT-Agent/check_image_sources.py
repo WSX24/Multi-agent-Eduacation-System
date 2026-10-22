@@ -42,6 +42,7 @@ SKILL_CANDIDATES = (
 WEB_SOURCES = {
     "openverse": ("api.openverse.org", (), True),
     "wikimedia": ("commons.wikimedia.org", (), True),
+    "met": ("collectionapi.metmuseum.org", (), True),
     "pexels": ("api.pexels.com", ("PEXELS_API_KEY",), False),
     "pixabay": ("pixabay.com", ("PIXABAY_API_KEY",), False),
 }

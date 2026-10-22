@@ -820,3 +820,60 @@ skill 项目路径、该看哪个日志、以及「SVG 已齐只差导出」时�
 ```
 
 `--selftest` 扩到 **15 条**（新增「导出兜底」用例：有图保留 / 缺图剥掉 / 外链保留）。
+
+---
+
+## 新增图源：The Met（纽约大都会博物馆，零 key / CC0）
+
+> 日期：2026-10-22。起因：李清照、岳飞这类古画需求在现有 5 家图源里根本不存在。
+
+### 为什么加它
+
+Pixabay/书格 都没有「仕女/花鸟/山水/竹石」这类中国古画的系统收藏，所以
+「李清照画像」只能配到猫。Met 有约 49 万件公有领域高清图，每件带
+`isPublicDomain` + `primaryImage` + 年代/材质/文化，授权干净、竖幅多。
+
+### 实现（`image_pipeline.py` 新增 `met` provider）
+
+- 搜索：`/public/collection/v1.1/search?q=&departmentId=6&offset=0&limit=`
+  ⚠️ 旧的 `v1/search` **已于 2026-10-01 退役**，官方报错里点名要用 v1.1
+- 详情：`/public/collection/v1/objects/{id}`，4 线程并发取 ≤20 条
+- 只收 `isPublicDomain=true` 且 `primaryImage` 非空的；尺寸不足（<1200×800）跳过
+- 排序与其它图源同一口径：`rank_key`（先命中词数、再风格偏好）
+- 溯源写 `license_name="CC0 / Public Domain (The Met Open Access)"`、`license_tier=no-attribution`
+- 同册不重复用同一张（`_MET_USED`）
+- 已登记：`DEFAULT_PROVIDERS`、`_PROVIDER_HOSTS`（TCP 探测）、`_provider_order_for`
+  （arts/classical 行排第一）、`check_image_sources.py`
+
+### 关键坑：`departmentId=6` 不等于「中国」
+
+实测 `departmentId=6`（亚洲艺术）里**日本藏品占大头**：搜 `Chinese landscape`
+的 10 条里 7 条是日本浮世绘/屏风（只是画了中国题材），还会因为标题里有
+"Chinese Lion" 混进来。所以加了硬过滤：`culture` 必须含 China/Chinese。
+
+修完实测：
+
+| 需求 | 结果 |
+|---|---|
+| 竹石图｜竹子 石头 水墨 | ✅ Met 2404×4000《Ink bamboo》1749 中国立轴 |
+| 花鸟折枝 | ✅ Met 1529×4000《Flower and Bird》1878 中国立轴 |
+| 仕女对镜｜梳妆 | ❌ 9 条候选里没有「中国 + PD + 有图」的 → 正确降级 |
+
+**Met 没有具体中国名人**：`Li Qingzhao`、`Yue Fei` 搜索结果都是 0，这类需求仍会降级。
+
+### 顺带修：失败日志不再只显示最后一家
+
+以前 `✗ p02: pexels#1 PEXELS_API_KEY is not set` —— 只看到最后一家的错，
+看不到「Met 有 9 条但都不是公有领域」「wikimedia 连接被重置」。
+现在逐家收集原因并拼起来：
+
+```
+✗ p02: met:3 条结果里没有公有领域高清图｜wikimedia:连接被重置｜pexels:未配置 key
+```
+
+### 体检现状（本机）
+
+```
+❌ openverse  TimeoutError      ❌ wikimedia  TimeoutError
+✅ met        通（零配置）        ✅ pixabay   通（key 已配，34 位）
+```
