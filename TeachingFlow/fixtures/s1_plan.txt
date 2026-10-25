@@ -1,0 +1,111 @@
+【学生学习方案】高中语文 · 现代文阅读（6 周 × 每周 3 课时）
+
+这份方案按「散文 → 小说 → 论述类文本」的顺序推进：
+先用散文练「读懂一篇文章」，再用小说练「读懂一个人物与一条情节线」，
+最后用论述类文本练「读懂一个论证结构」。
+每章结束有一次章节测验，达到 60% 正确率才解锁下一章。
+
+course:
+  subject: 语文
+  goal: 掌握现代文阅读的细读方法、题型判定与规范作答，能独立完成散文、小说、论述类文本的阅读题
+  student_level: 基础
+  total_weeks: 6
+  weekly_hours: 3
+  mode: long_term
+  buffer_ratio: 0.15
+  net_hour_budget: 15.0
+
+chapters:
+  - id: ch01
+    order: 1
+    title: 散文阅读入门
+    estimated_hours: 5
+    unlock:
+      type: none
+    units:
+      - id: ch01-u1
+        title: 散文的文本细读与圈点勾画
+        type: 新授
+        estimated_hours: 2.5
+        homework:
+          count: 4
+          difficulty: 基础
+        lesson_status: pending
+      - id: ch01-u2
+        title: 散文的情感线索与主旨概括
+        type: 新授
+        estimated_hours: 2.5
+        homework:
+          count: 4
+          difficulty: 基础
+        lesson_status: pending
+    assessment:
+      type: chapter_test
+      difficulty: 基础
+      covers: [ch01-u1, ch01-u2]
+      unlock_next:
+        min_score: 60
+
+  - id: ch02
+    order: 2
+    title: 小说阅读
+    estimated_hours: 5
+    unlock:
+      type: after_chapter
+      chapter: ch01
+      min_score: 60
+    units:
+      - id: ch02-u1
+        title: 人物形象的分析与概括
+        type: 新授
+        estimated_hours: 2.5
+        homework:
+          count: 4
+          difficulty: 基础
+        lesson_status: pending
+      - id: ch02-u2
+        title: 情节作用与环境描写
+        type: 新授
+        estimated_hours: 2.5
+        homework:
+          count: 4
+          difficulty: 基础
+        lesson_status: pending
+    assessment:
+      type: chapter_test
+      difficulty: 基础
+      covers: [ch02-u1, ch02-u2]
+      unlock_next:
+        min_score: 60
+
+  - id: ch03
+    order: 3
+    title: 论述类文本阅读
+    estimated_hours: 5
+    unlock:
+      type: after_chapter
+      chapter: ch02
+      min_score: 60
+    units:
+      - id: ch03-u1
+        title: 论证结构与论点论据的对应
+        type: 新授
+        estimated_hours: 2.5
+        homework:
+          count: 4
+          difficulty: 中等
+        lesson_status: pending
+      - id: ch03-u2
+        title: 选项设错类型与排除方法
+        type: 新授
+        estimated_hours: 2.5
+        homework:
+          count: 4
+          difficulty: 中等
+        lesson_status: pending
+    assessment:
+      type: chapter_test
+      difficulty: 中等
+      covers: [ch03-u1, ch03-u2]
+      unlock_next:
+        min_score: 60

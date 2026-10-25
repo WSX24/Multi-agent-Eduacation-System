@@ -1,0 +1,9 @@
+# runs/ 是运行产物（每次运行的 prompt / result / pptx），不入仓
+runs/
+dist/        # 打包产物（tools/package_release.py 的输出）
+.work/      # S5 短路径构建目录（成功后归档进对应 run，失败残留可直接删）
+state/
+__pycache__/
+*.pyc
+.env
+recovered/
